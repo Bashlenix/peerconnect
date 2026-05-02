@@ -29,10 +29,23 @@ export interface CreatePostInput {
   isUrgent?: boolean;
 }
 
-export async function getPosts(params?: { limit?: number; offset?: number }): Promise<GetPostsResponse> {
+export type SinceFilter = "24h" | "3d" | "7d";
+
+export interface GetPostsParams {
+  limit?: number;
+  offset?: number;
+  category?: PostCategory;
+  since?: SinceFilter;
+  subscribed?: boolean;
+}
+
+export async function getPosts(params?: GetPostsParams): Promise<GetPostsResponse> {
   const query = new URLSearchParams();
   if (params?.limit != null) query.set("limit", String(params.limit));
   if (params?.offset != null) query.set("offset", String(params.offset));
+  if (params?.category) query.set("category", params.category);
+  if (params?.since) query.set("since", params.since);
+  if (params?.subscribed != null) query.set("subscribed", String(params.subscribed));
 
   const url = `${BASE}/posts${query.size > 0 ? `?${query}` : ""}`;
   const res = await fetch(url, { credentials: "include" });

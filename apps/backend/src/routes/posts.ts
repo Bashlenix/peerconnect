@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import { getFeedPosts } from "../modules/feed-query.js";
+import type { SinceFilter } from "../modules/feed-query.js";
 import type { NotificationType, PostCategory } from "../generated/prisma/client.js";
 import { sseManager } from "../modules/sse-manager.js";
 import { checkAndAwardBadges } from "../modules/badge-engine.js";
@@ -16,6 +17,9 @@ interface CreatePostBody {
 interface GetPostsQuery {
   limit?: number;
   offset?: number;
+  category?: string;
+  since?: string;
+  subscribed?: boolean;
 }
 
 interface PostParamsOnly {
@@ -171,6 +175,9 @@ export async function postsRoute(app: FastifyInstance) {
           properties: {
             limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
             offset: { type: "integer", minimum: 0, default: 0 },
+            category: { type: "string", enum: VALID_CATEGORIES },
+            since: { type: "string", enum: ["24h", "3d", "7d"] },
+            subscribed: { type: "boolean" },
           },
         },
         response: {
@@ -190,8 +197,15 @@ export async function postsRoute(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { limit = 20, offset = 0 } = request.query;
-      const posts = await getFeedPosts(prisma, { limit, offset });
+      const { limit = 20, offset = 0, category, since, subscribed } = request.query;
+      const posts = await getFeedPosts(prisma, {
+        limit,
+        offset,
+        category: category as PostCategory | undefined,
+        since: since as SinceFilter | undefined,
+        subscribed,
+        userId: request.user.userId,
+      });
       return reply.status(200).send({ posts: posts.map(serializePost) });
     }
   );

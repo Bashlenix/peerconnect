@@ -1,55 +1,48 @@
-feat: Issue 13 — Real-Time SSE Notifications
+feat: Issue 06 — Feed Filtering (Category, Time, Subscribed Toggle)
 
 Key decisions:
-- SSEManager module holds per-user connection maps keyed by UUID; push()
-  skips writableEnded/destroyed connections without throwing; unregister()
-  prunes empty user buckets; singleton exported for use across routes
-- GET /notifications/stream: reply.hijack() used to take ownership of the raw
-  Node.js response; writes SSE headers + initial ping; 30s ping interval kept
-  alive until client close event fires; clearInterval on close prevents leaks
-- PATCH /notifications/read-all registered BEFORE PATCH /notifications/:id/read
-  so find-my-way matches the static path first (no conflict since depths differ)
-- POST /posts: fires NEW_POST_IN_CATEGORY notifications to all subscribed users
-  (excluding post author) using createMany for batch insert then SSE push per
-  user; wrapped in void fire-and-forget async IIFE to avoid delaying the 201
-- POST /posts/:id/replies: extended post select to include authorId; creates
-  REPLY_TO_POST notification + SSE push for post author, skipped when replier
-  === post author
-- POST /replies/:id/upvote: extended reply select to include authorId + postId;
-  creates REPLY_UPVOTED notification + SSE push for reply author, skipped for
-  self-upvote
-- PATCH /posts/:id/solution: extended replyRecord select to include authorId;
-  creates REPLY_MARKED_SOLUTION notification + SSE push for reply author, skipped
-  when post author marks their own reply
-- Frontend NotificationBell: EventSource("/api/notifications/stream") opened in
-  useEffect; on "notification" event -> invalidate ['notifications'] query so
-  TanStack Query refetches; bell badge shows unreadCount; dropdown lists 20
-  most recent notifications with type label + timestamp; click marks read +
-  navigates to post if postId present; "Mark all read" button when unreadCount > 0
-- NotificationBell added to FeedPage header (between email and sign-out) and
-  PostDetailPage header (ml-auto right side)
+- FeedQueryParams extended with category (PostCategory), since ("24h"|"3d"|"7d"),
+  subscribed (boolean), userId (string); all optional — existing callers unaffected
+- Subscribed filter fetches the user's NotificationPreference rows inside
+  getFeedPosts and resolves them to a PostCategory[] before the Prisma query;
+  short-circuits with [] immediately when no categories match (avoids unnecessary
+  DB round-trip)
+- Category + subscribed intersection: if both are supplied, the specific category
+  must be in the user's subscribed list; otherwise returns empty — avoids leaking
+  non-subscribed posts through a combined query
+- since filter maps to a sinceDate() helper that converts "24h"/"3d"/"7d" to a
+  Date threshold; used as { createdAt: { gte: threshold } } — no raw SQL
+- GET /posts querystring schema extended with category (enum), since (enum),
+  subscribed (boolean); Fastify validates inputs before reaching handler — invalid
+  values return 400 automatically
+- userId always available in GET /posts handler since route is protected; passed
+  through to getFeedPosts unconditionally (ignored unless subscribed=true)
+- Frontend: FeedFilters state { category, since, subscribed } drives queryKey
+  ["posts", filters] so TanStack Query refetches immediately on any filter change
+  (no page reload needed); FilterPanel renders category select, since select, and
+  subscribed checkbox; "Clear all" button shown only when a filter is active;
+  Card border highlighted blue when filters are active
 
 Files changed:
-- apps/backend/src/modules/sse-manager.ts (new - SSEManager class + singleton)
-- apps/backend/src/routes/notifications.ts (new - stream, list, mark-read, mark-all-read)
-- apps/backend/src/app.ts (register notificationsRoute)
-- apps/backend/src/routes/posts.ts (NEW_POST_IN_CATEGORY + REPLY_MARKED_SOLUTION push)
-- apps/backend/src/routes/replies.ts (REPLY_TO_POST + REPLY_UPVOTED push)
-- apps/backend/tests/notifications.test.ts (new - 26 tests: SSEManager unit, HTTP endpoints,
-  integration tests verifying notification rows created on each trigger event)
-- apps/frontend/src/api/notifications.ts (new - getNotifications, markNotificationRead,
-  markAllNotificationsRead; Notification interface; NotificationType union)
-- apps/frontend/src/components/NotificationBell.tsx (new - bell + SSE + dropdown)
-- apps/frontend/src/pages/FeedPage.tsx (NotificationBell in header)
-- apps/frontend/src/pages/PostDetailPage.tsx (NotificationBell in header)
-- .ai/issues/done/13-sse-notifications.md (moved to done)
+- apps/backend/src/modules/feed-query.ts (SinceFilter type; extended
+  FeedQueryParams; sinceDate helper; subscribed/category/since logic in
+  getFeedPosts)
+- apps/backend/src/routes/posts.ts (import SinceFilter; extended GetPostsQuery
+  interface; extended querystring schema; pass filter params + userId to
+  getFeedPosts)
+- apps/backend/tests/posts.test.ts (10 new tests: category filter, since filter,
+  subscribed filter, empty subscribed, combined category+since, subscribed+category
+  intersection; 4 route integration tests: category param, since param, invalid
+  category 400, invalid since 400)
+- apps/frontend/src/api/posts.ts (SinceFilter type; GetPostsParams interface;
+  getPosts accepts category/since/subscribed; appends to URLSearchParams)
+- apps/frontend/src/pages/FeedPage.tsx (SINCE_OPTIONS constant; FeedFilters
+  interface; FilterPanel component; filter state in FeedPage; queryKey includes
+  filters; empty-state message differs when filters active)
+- .ai/issues/done/06-feed-filtering.md (moved to done)
 
 Blockers/notes:
-- All 158 tests pass (26 new); tsc --noEmit clean on backend and frontend
-- badge_awarded SSE event intentionally left for Issue 14 (Badge Engine) to wire;
-  SSEManager.push("badge_awarded") call will be added there
-- SSE stream endpoint not integration-tested with inject (long-lived connection
-  incompatible with light-my-request); covered by SSEManager unit tests instead
-- Issues 06, 10, 14 remain open
+- All 188 tests pass (10 new); tsc --noEmit clean on backend and frontend
+- Issue 10 (Full-Text Search) remains open
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

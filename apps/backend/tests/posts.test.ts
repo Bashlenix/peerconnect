@@ -190,6 +190,127 @@ describe("FeedQuery.getFeedPosts", () => {
 
     expect(posts[0].replyCount).toBe(2);
   });
+
+  it("filters by category", async () => {
+    const author = await prisma.user.create({
+      data: { email: "fq-cat@example.com", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    await prisma.post.createMany({
+      data: [
+        { content: "Academic post", category: "Academic", authorId: author.id },
+        { content: "Social post", category: "Social", authorId: author.id },
+      ],
+    });
+
+    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic" });
+
+    expect(posts.every((p) => p.category === "Academic")).toBe(true);
+    expect(posts.some((p) => p.content === "Academic post")).toBe(true);
+    expect(posts.some((p) => p.content === "Social post")).toBe(false);
+  });
+
+  it("filters by since (time range)", async () => {
+    const author = await prisma.user.create({
+      data: { email: "fq-since@example.com", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    const recentDate = new Date(Date.now() - 12 * 60 * 60 * 1000); // 12h ago
+    const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+
+    await prisma.post.create({
+      data: { content: "Recent post", category: "Academic", authorId: author.id, createdAt: recentDate },
+    });
+    await prisma.post.create({
+      data: { content: "Old post", category: "Academic", authorId: author.id, createdAt: oldDate },
+    });
+
+    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, since: "24h" });
+
+    const contents = posts.map((p) => p.content);
+    expect(contents).toContain("Recent post");
+    expect(contents).not.toContain("Old post");
+  });
+
+  it("filters by subscribed categories", async () => {
+    const user = await prisma.user.create({
+      data: { email: "fq-sub@example.com", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    await prisma.notificationPreference.create({ data: { userId: user.id, category: "Sport" } });
+    await prisma.post.createMany({
+      data: [
+        { content: "A sport post", category: "Sport", authorId: user.id },
+        { content: "A social post", category: "Social", authorId: user.id },
+      ],
+    });
+
+    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, subscribed: true, userId: user.id });
+
+    expect(posts.every((p) => p.category === "Sport")).toBe(true);
+    expect(posts.some((p) => p.content === "A sport post")).toBe(true);
+    expect(posts.some((p) => p.content === "A social post")).toBe(false);
+  });
+
+  it("returns empty array for subscribed filter when user has no preferences", async () => {
+    const user = await prisma.user.create({
+      data: { email: "fq-sub-empty@example.com", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    await prisma.post.create({
+      data: { content: "Any post", category: "Academic", authorId: user.id },
+    });
+
+    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, subscribed: true, userId: user.id });
+
+    expect(posts).toHaveLength(0);
+  });
+
+  it("combines category and since filters", async () => {
+    const author = await prisma.user.create({
+      data: { email: "fq-combo@example.com", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    const recentDate = new Date(Date.now() - 1 * 60 * 60 * 1000); // 1h ago
+    const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+
+    await prisma.post.createMany({
+      data: [
+        { content: "Recent Academic", category: "Academic", authorId: author.id, createdAt: recentDate },
+        { content: "Old Academic", category: "Academic", authorId: author.id, createdAt: oldDate },
+        { content: "Recent Social", category: "Social", authorId: author.id, createdAt: recentDate },
+      ],
+    });
+
+    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic", since: "7d" });
+
+    const contents = posts.map((p) => p.content);
+    expect(contents).toContain("Recent Academic");
+    expect(contents).not.toContain("Old Academic");
+    expect(contents).not.toContain("Recent Social");
+  });
+
+  it("subscribed filter respects specific category intersection", async () => {
+    const user = await prisma.user.create({
+      data: { email: "fq-sub-cat@example.com", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    await prisma.notificationPreference.create({ data: { userId: user.id, category: "Academic" } });
+    await prisma.post.createMany({
+      data: [
+        { content: "Academic post", category: "Academic", authorId: user.id },
+        { content: "Sport post", category: "Sport", authorId: user.id },
+      ],
+    });
+
+    // category=Sport is NOT in subscribed list → empty
+    const noMatch = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Sport", subscribed: true, userId: user.id });
+    expect(noMatch).toHaveLength(0);
+
+    // category=Academic IS in subscribed list → returns matching post
+    const match = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic", subscribed: true, userId: user.id });
+    expect(match.some((p) => p.content === "Academic post")).toBe(true);
+  });
 });
 
 // ─── POST /posts ──────────────────────────────────────────────────────────────
@@ -379,6 +500,74 @@ describe("GET /posts", () => {
     expect(page1.json().posts).toHaveLength(2);
     expect(page2.json().posts).toHaveLength(2);
     expect(page1.json().posts[0].id).not.toBe(page2.json().posts[0].id);
+  });
+
+  it("filters by category via query param", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("get-filter-cat@tu-berlin.de");
+    await prisma.post.createMany({
+      data: [
+        { content: "Academic one", category: "Academic", authorId: userId },
+        { content: "Social one", category: "Social", authorId: userId },
+      ],
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/posts?category=Academic",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const posts = res.json().posts as Array<{ category: string }>;
+    expect(posts.every((p) => p.category === "Academic")).toBe(true);
+    expect(posts.some((p: { content?: string }) => (p as { content: string }).content === "Academic one")).toBe(true);
+  });
+
+  it("filters by since via query param", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("get-filter-since@tu-berlin.de");
+    const recentDate = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
+    const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+    await prisma.post.create({
+      data: { content: "Recent", category: "Academic", authorId: userId, createdAt: recentDate },
+    });
+    await prisma.post.create({
+      data: { content: "Old", category: "Academic", authorId: userId, createdAt: oldDate },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/posts?since=24h",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const contents = (res.json().posts as Array<{ content: string }>).map((p) => p.content);
+    expect(contents).toContain("Recent");
+    expect(contents).not.toContain("Old");
+  });
+
+  it("returns 400 for invalid category query param", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("get-filter-badcat@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/posts?category=InvalidCategory",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("returns 400 for invalid since query param", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("get-filter-badsince@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/posts?since=2w",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(400);
   });
 });
 

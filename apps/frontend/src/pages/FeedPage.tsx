@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2 } from "lucide-react";
+import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter } from "lucide-react";
 import { logout } from "@/api/auth";
-import { getPosts, createPost, updatePost, deletePost, type PostCategory, type Post } from "@/api/posts";
+import { getPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
 import { useAuthStore } from "@/store/auth";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
@@ -268,10 +268,90 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+const SINCE_OPTIONS: { value: SinceFilter; label: string }[] = [
+  { value: "24h", label: "Last 24h" },
+  { value: "3d", label: "Last 3 days" },
+  { value: "7d", label: "Last 7 days" },
+];
+
+interface FeedFilters {
+  category: PostCategory | "";
+  since: SinceFilter | "";
+  subscribed: boolean;
+}
+
+function FilterPanel({
+  filters,
+  onChange,
+}: {
+  filters: FeedFilters;
+  onChange: (filters: FeedFilters) => void;
+}) {
+  const hasActiveFilter = filters.category !== "" || filters.since !== "" || filters.subscribed;
+
+  return (
+    <Card className={hasActiveFilter ? "border-blue-300 bg-blue-50/40" : ""}>
+      <CardContent className="pt-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-medium text-gray-700">Filters</span>
+          {hasActiveFilter && (
+            <button
+              className="ml-auto text-xs text-blue-600 hover:underline"
+              onClick={() => onChange({ category: "", since: "", subscribed: false })}
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-3 items-center">
+          <select
+            value={filters.category}
+            onChange={(e) => onChange({ ...filters, category: e.target.value as PostCategory | "" })}
+            className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+          >
+            <option value="">All categories</option>
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.since}
+            onChange={(e) => onChange({ ...filters, since: e.target.value as SinceFilter | "" })}
+            className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+          >
+            <option value="">Any time</option>
+            {SINCE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filters.subscribed}
+              onChange={(e) => onChange({ ...filters, subscribed: e.target.checked })}
+              className="rounded border-gray-300"
+            />
+            My subscriptions only
+          </label>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function FeedPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, clearAuth } = useAuthStore();
+
+  const [filters, setFilters] = useState<FeedFilters>({ category: "", since: "", subscribed: false });
 
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -283,13 +363,21 @@ export default function FeedPage() {
   });
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: () => getPosts({ limit: 50 }),
+    queryKey: ["posts", filters],
+    queryFn: () =>
+      getPosts({
+        limit: 50,
+        category: filters.category || undefined,
+        since: filters.since || undefined,
+        subscribed: filters.subscribed || undefined,
+      }),
   });
 
   function invalidateFeed() {
     queryClient.invalidateQueries({ queryKey: ["posts"] });
   }
+
+  const hasActiveFilter = filters.category !== "" || filters.since !== "" || filters.subscribed;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -312,6 +400,8 @@ export default function FeedPage() {
       <main className="mx-auto max-w-2xl px-4 py-8 space-y-4">
         <CreatePostForm onSuccess={invalidateFeed} />
 
+        <FilterPanel filters={filters} onChange={setFilters} />
+
         {isLoading && (
           <div className="flex justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -324,7 +414,9 @@ export default function FeedPage() {
 
         {data && data.posts.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-8">
-            No posts yet. Be the first to ask something!
+            {hasActiveFilter
+              ? "No posts match the current filters."
+              : "No posts yet. Be the first to ask something!"}
           </p>
         )}
 
