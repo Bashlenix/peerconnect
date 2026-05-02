@@ -63,3 +63,43 @@ export async function updateProfile(input: UpdateProfileInput): Promise<OwnProfi
 
   return data;
 }
+
+export type PostCategory = "Academic" | "Social" | "Sport" | "DailyLifeSupport";
+
+export const ALL_CATEGORIES: PostCategory[] = ["Academic", "Social", "Sport", "DailyLifeSupport"];
+
+export interface NotificationPreferences {
+  categories: PostCategory[];
+}
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  const res = await fetch(`${BASE}/users/me/notification-preferences`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = (await res.json()) as { message?: string };
+    throw new Error(data.message ?? "Failed to fetch notification preferences");
+  }
+
+  return res.json() as Promise<NotificationPreferences>;
+}
+
+export async function updateNotificationPreferences(
+  categories: PostCategory[]
+): Promise<NotificationPreferences> {
+  const res = await fetch(`${BASE}/users/me/notification-preferences`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ categories }),
+  });
+
+  const data = (await res.json()) as NotificationPreferences & { message?: string };
+
+  if (!res.ok) {
+    throw new Error(data.message ?? "Failed to update notification preferences");
+  }
+
+  return data;
+}

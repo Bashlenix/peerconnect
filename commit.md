@@ -1,41 +1,36 @@
-feat: Issue 11 — User Profile (Own & Public View)
+feat: Issue 12 — Notification Category Preferences
 
 Key decisions:
-- GET /users/:id: public endpoint (no auth required); returns id, firstName,
-  lastName, studyProgramme, semester, languages, replyCount, solutionCount, badges;
-  email and passwordHash are never exposed; replyCount from _count.replies,
-  solutionCount from filtered replies where isSolution=true, badges from
-  userBadges with nested badge select; 404 for unknown id
-- PATCH /users/me: protected; accepts firstName, lastName, studyProgramme,
-  semester, languages; email field silently ignored even if sent in body;
-  partial update — only provided fields are written (spread-conditional pattern
-  used in existing routes); returns updated own-profile object including email
-- usersRoute registered in app.ts following the existing route-per-file pattern
-- Frontend API (api/users.ts): getPublicProfile(userId), updateProfile(input)
-  with typed PublicProfile and OwnProfile interfaces
-- ProfilePage (/profile): protected; loads profile via getPublicProfile using
-  the Zustand user.id; form pre-fills from loaded data via useEffect; partial
-  diff sent on submit (only changed fields); shows "Saved!" confirmation briefly;
-  badges rendered below form; email shown as read-only
-- UserProfilePage (/users/:id): protected; read-only; shows name, study
-  programme, semester, languages, reply/solution stat cards, and badge chips
-  with description tooltip; "User not found" state for 404; navigate(-1) back
-- Both pages use TanStack Query (useQuery/useMutation) for server state
+- NotificationPreference model already existed in schema (no migration needed);
+  unique([userId, category]) constraint handles deduplication at the DB level
+- GET /users/me/notification-preferences: protected; returns { categories:
+  PostCategory[] } sorted alphabetically; empty array for users with no prefs
+- PUT /users/me/notification-preferences: protected; accepts { categories:
+  PostCategory[] }; validates each value against VALID_CATEGORIES constant;
+  uses $transaction([deleteMany, createMany]) for atomic full-replace semantics;
+  deduplicates in application layer before insert to avoid unique-constraint errors
+- Frontend api/users.ts: getNotificationPreferences(), updateNotificationPreferences()
+  with PostCategory type and ALL_CATEGORIES constant shared with UI layer
+- ProfilePage extended with "Notification Preferences" section: one checkbox per
+  category (Academic, Social, Sport, Daily Life Support); separate Save button
+  with its own isPending/saved state to avoid coupling with profile form; toggleCategory
+  updates local state immediately, mutation persists on save; invalidates
+  ['notificationPreferences'] query key on success
 
 Files changed:
-- apps/backend/src/routes/users.ts (new — GET /users/:id, PATCH /users/me)
-- apps/backend/src/app.ts (register usersRoute)
-- apps/backend/tests/users.test.ts (new — 10 tests: public profile, PATCH /users/me)
-- apps/frontend/src/api/users.ts (new — getPublicProfile, updateProfile)
-- apps/frontend/src/pages/ProfilePage.tsx (new — editable own profile)
-- apps/frontend/src/pages/UserProfilePage.tsx (new — public read-only profile)
-- apps/frontend/src/App.tsx (/profile + /users/:id protected routes added)
-- .ai/issues/done/11-user-profile.md (moved to done)
+- apps/backend/src/routes/users.ts (GET + PUT /users/me/notification-preferences)
+- apps/backend/tests/users.test.ts (9 new tests: GET empty, GET with prefs, PUT set,
+  PUT replace, PUT clear, PUT dedup, PUT invalid category, GET 401, PUT 401)
+- apps/frontend/src/api/users.ts (getNotificationPreferences, updateNotificationPreferences,
+  PostCategory type, ALL_CATEGORIES, NotificationPreferences interface)
+- apps/frontend/src/pages/ProfilePage.tsx (notification preferences section with
+  category checkboxes and save button)
+- .ai/issues/done/12-notification-preferences.md (moved to done)
 
 Blockers/notes:
-- All 111 tests pass (10 new); tsc --noEmit clean on backend and frontend
-- Issue 11 unblocks Issue 12 (Notification Category Preferences)
-- solutionCount uses a filtered relation query (replies where isSolution=true)
-  rather than a separate aggregate call to keep it in one Prisma round-trip
+- All 120 tests pass (9 new); tsc --noEmit clean on backend and frontend
+- Issue 12 unblocks Issue 13 (Real-Time SSE Notifications); Issue 13 also needs
+  Issue 09 which is already done
+- PUT uses opt-in model (empty array = no subscriptions) as specified in acceptance criteria
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

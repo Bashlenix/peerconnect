@@ -2,7 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
-import { updateProfile, getPublicProfile, type UpdateProfileInput } from "@/api/users";
+import {
+  updateProfile,
+  getPublicProfile,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  ALL_CATEGORIES,
+  type UpdateProfileInput,
+  type PostCategory,
+} from "@/api/users";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,11 +28,18 @@ export default function ProfilePage() {
   const [semester, setSemester] = useState("");
   const [languagesRaw, setLanguagesRaw] = useState("");
   const [saved, setSaved] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<PostCategory[]>([]);
+  const [prefsSaved, setPrefsSaved] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: () => getPublicProfile(user!.id),
     enabled: !!user?.id,
+  });
+
+  const { data: notifPrefs } = useQuery({
+    queryKey: ["notificationPreferences"],
+    queryFn: getNotificationPreferences,
   });
 
   useEffect(() => {
@@ -36,6 +51,11 @@ export default function ProfilePage() {
     setLanguagesRaw(profile.languages.join(", "));
   }, [profile]);
 
+  useEffect(() => {
+    if (!notifPrefs) return;
+    setSelectedCategories(notifPrefs.categories);
+  }, [notifPrefs]);
+
   const mutation = useMutation({
     mutationFn: (input: UpdateProfileInput) => updateProfile(input),
     onSuccess: (updated) => {
@@ -43,11 +63,26 @@ export default function ProfilePage() {
       queryClient.invalidateQueries({ queryKey: ["publicProfile", user?.id] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      // Keep form state in sync
       setFirstName(updated.firstName ?? "");
       setLastName(updated.lastName ?? "");
     },
   });
+
+  const prefsMutation = useMutation({
+    mutationFn: (categories: PostCategory[]) => updateNotificationPreferences(categories),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["notificationPreferences"] });
+      setSelectedCategories(updated.categories);
+      setPrefsSaved(true);
+      setTimeout(() => setPrefsSaved(false), 2000);
+    },
+  });
+
+  function toggleCategory(category: PostCategory) {
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+    );
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -183,6 +218,57 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
+
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-gray-800 mb-1">Notification Preferences</h2>
+          <p className="text-sm text-gray-500 mb-3">
+            Receive notifications for new posts in the selected categories.
+          </p>
+          <Card>
+            <CardContent className="pt-6 space-y-3">
+              {ALL_CATEGORIES.map((category) => {
+                const checked = selectedCategories.includes(category);
+                const label =
+                  category === "DailyLifeSupport" ? "Daily Life Support" : category;
+                return (
+                  <label
+                    key={category}
+                    className="flex items-center gap-3 cursor-pointer select-none"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleCategory(category)}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </label>
+                );
+              })}
+
+              {prefsMutation.error && (
+                <p className="text-sm text-red-600">
+                  {(prefsMutation.error as Error).message}
+                </p>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={prefsMutation.isPending}
+                onClick={() => prefsMutation.mutate(selectedCategories)}
+                className="w-full mt-2"
+              >
+                {prefsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                {prefsSaved ? "Saved!" : "Save preferences"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

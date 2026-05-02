@@ -1,5 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
+import type { PostCategory } from "../generated/prisma/client.js";
+
+const VALID_CATEGORIES: PostCategory[] = ["Academic", "Social", "Sport", "DailyLifeSupport"];
 
 interface UserIdParams {
   id: string;
@@ -11,6 +14,10 @@ interface PatchMeBody {
   studyProgramme?: string;
   semester?: number;
   languages?: string[];
+}
+
+interface PutNotificationPreferencesBody {
+  categories: string[];
 }
 
 const badgeSchema = {
@@ -180,6 +187,94 @@ export async function usersRoute(app: FastifyInstance) {
       });
 
       return reply.status(200).send(updated);
+    }
+  );
+
+  // ─── GET /users/me/notification-preferences ──────────────────────────────────
+
+  app.get(
+    "/users/me/notification-preferences",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Users"],
+        summary: "Get the authenticated user's notification category subscriptions",
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              categories: { type: "array", items: { type: "string" } },
+            },
+            required: ["categories"],
+          },
+          401: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.user.userId;
+
+      const prefs = await prisma.notificationPreference.findMany({
+        where: { userId },
+        select: { category: true },
+        orderBy: { category: "asc" },
+      });
+
+      return reply.status(200).send({ categories: prefs.map((p) => p.category) });
+    }
+  );
+
+  // ─── PUT /users/me/notification-preferences ───────────────────────────────────
+
+  app.put<{ Body: PutNotificationPreferencesBody }>(
+    "/users/me/notification-preferences",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Users"],
+        summary: "Replace the authenticated user's notification category subscriptions",
+        body: {
+          type: "object",
+          required: ["categories"],
+          properties: {
+            categories: {
+              type: "array",
+              items: { type: "string", enum: VALID_CATEGORIES },
+            },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              categories: { type: "array", items: { type: "string" } },
+            },
+            required: ["categories"],
+          },
+          400: errorSchema,
+          401: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.user.userId;
+      const { categories } = request.body;
+
+      const invalid = categories.filter((c) => !VALID_CATEGORIES.includes(c as PostCategory));
+      if (invalid.length > 0) {
+        return reply.status(400).send({ message: `Invalid categories: ${invalid.join(", ")}` });
+      }
+
+      const unique = [...new Set(categories)] as PostCategory[];
+
+      await prisma.$transaction([
+        prisma.notificationPreference.deleteMany({ where: { userId } }),
+        prisma.notificationPreference.createMany({
+          data: unique.map((category) => ({ userId, category })),
+        }),
+      ]);
+
+      return reply.status(200).send({ categories: unique.sort() });
     }
   );
 }

@@ -269,3 +269,138 @@ describe("PATCH /users/me", () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+// ─── GET /users/me/notification-preferences ───────────────────────────────────
+
+describe("GET /users/me/notification-preferences", () => {
+  it("returns empty array for a new user with no preferences", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("notif-get-empty@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ categories: [] });
+  });
+
+  it("returns the user's subscribed categories", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-get-prefs@tu-berlin.de");
+
+    await prisma.notificationPreference.createMany({
+      data: [
+        { userId, category: "Academic" },
+        { userId, category: "Social" },
+      ],
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { categories: string[] };
+    expect(body.categories.sort()).toEqual(["Academic", "Social"]);
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    const res = await app.inject({ method: "GET", url: "/users/me/notification-preferences" });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// ─── PUT /users/me/notification-preferences ───────────────────────────────────
+
+describe("PUT /users/me/notification-preferences", () => {
+  it("sets notification preferences for the user", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("notif-put-set@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+      payload: { categories: ["Academic", "Sport"] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { categories: string[] };
+    expect(body.categories.sort()).toEqual(["Academic", "Sport"]);
+  });
+
+  it("replaces existing preferences on subsequent PUT", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("notif-put-replace@tu-berlin.de");
+
+    await app.inject({
+      method: "PUT",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+      payload: { categories: ["Academic", "Social"] },
+    });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+      payload: { categories: ["Sport"] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ categories: ["Sport"] });
+  });
+
+  it("accepts an empty array to clear all preferences", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-put-clear@tu-berlin.de");
+
+    await prisma.notificationPreference.create({ data: { userId, category: "Academic" } });
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+      payload: { categories: [] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ categories: [] });
+  });
+
+  it("deduplicates categories in the request body", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("notif-put-dedup@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+      payload: { categories: ["Academic", "Academic"] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ categories: ["Academic"] });
+  });
+
+  it("returns 400 for an invalid category", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("notif-put-invalid@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/users/me/notification-preferences",
+      headers: { cookie: cookieHeader },
+      payload: { categories: ["InvalidCategory"] },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    const res = await app.inject({
+      method: "PUT",
+      url: "/users/me/notification-preferences",
+      payload: { categories: ["Academic"] },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
