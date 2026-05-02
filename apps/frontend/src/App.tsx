@@ -1,18 +1,17 @@
-import type { PostCategory } from "@peerconnect/shared";
-
-const categories: PostCategory[] = [
-  "Academic",
-  "Social",
-  "Sport",
-  "Daily Life Support",
-];
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import RegisterPage from "./pages/RegisterPage";
+import CheckEmailPage from "./pages/CheckEmailPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 
 export default function App() {
   return (
-    <div style={{ fontFamily: "sans-serif", padding: "2rem" }}>
-      <h1>PeerConnect</h1>
-      <p>University Q&amp;A Platform</p>
-      <p>Categories: {categories.join(", ")}</p>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/check-email" element={<CheckEmailPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/" element={<Navigate to="/register" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

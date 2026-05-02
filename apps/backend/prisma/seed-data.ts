@@ -24,6 +24,8 @@ export const BADGES = [
 ];
 
 export async function seedReferenceData(prisma: PrismaClient): Promise<void> {
-  await prisma.university.createMany({ data: UNIVERSITIES, skipDuplicates: true });
-  await prisma.badge.createMany({ data: BADGES, skipDuplicates: true });
+  await Promise.all([
+    prisma.university.createMany({ data: UNIVERSITIES, skipDuplicates: true }),
+    prisma.badge.createMany({ data: BADGES, skipDuplicates: true }),
+  ]);
 }

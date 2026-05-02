@@ -15,19 +15,24 @@
     "seed": "npm run db:seed"
   },
   "dependencies": {
+    "@fastify/cors": "^11.2.0",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.6",
     "@peerconnect/shared": "*",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@types/pg": "^8.20.0",
+    "bcrypt": "^6.0.0",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
+    "nodemailer": "^8.0.7",
     "pg": "^8.20.0",
     "prisma": "^7.8.0"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20.14.0",
+    "@types/nodemailer": "^8.0.0",
     "tsx": "^4.15.6",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"
