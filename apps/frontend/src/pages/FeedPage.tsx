@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter } from "lucide-react";
+import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter, Search, X } from "lucide-react";
 import { logout } from "@/api/auth";
-import { getPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
+import { getPosts, searchPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
 import { useAuthStore } from "@/store/auth";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
@@ -352,6 +352,10 @@ export default function FeedPage() {
   const { user, clearAuth } = useAuthStore();
 
   const [filters, setFilters] = useState<FeedFilters>({ category: "", since: "", subscribed: false });
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const searchActive = searchQuery !== "";
 
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -362,7 +366,7 @@ export default function FeedPage() {
     },
   });
 
-  const { data, isLoading, isError, error } = useQuery({
+  const feedQueryResult = useQuery({
     queryKey: ["posts", filters],
     queryFn: () =>
       getPosts({
@@ -371,19 +375,69 @@ export default function FeedPage() {
         since: filters.since || undefined,
         subscribed: filters.subscribed || undefined,
       }),
+    enabled: !searchActive,
   });
+
+  const searchQueryResult = useQuery({
+    queryKey: ["posts", "search", searchQuery],
+    queryFn: () => searchPosts({ q: searchQuery, limit: 50 }),
+    enabled: searchActive,
+  });
+
+  const { data, isLoading, isError, error } = searchActive ? searchQueryResult : feedQueryResult;
 
   function invalidateFeed() {
     queryClient.invalidateQueries({ queryKey: ["posts"] });
+  }
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && searchInput.trim()) {
+      setSearchQuery(searchInput.trim());
+    } else if (e.key === "Escape") {
+      setSearchInput("");
+      setSearchQuery("");
+    }
+  }
+
+  function handleSearchChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setSearchInput(e.target.value);
+    if (e.target.value === "") {
+      setSearchQuery("");
+    }
+  }
+
+  function clearSearch() {
+    setSearchInput("");
+    setSearchQuery("");
   }
 
   const hasActiveFilter = filters.category !== "" || filters.since !== "" || filters.subscribed;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="border-b bg-white px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">PeerConnect</h1>
-        <div className="flex items-center gap-3">
+      <header className="border-b bg-white px-6 py-4 flex items-center justify-between gap-4">
+        <h1 className="text-xl font-semibold shrink-0">PeerConnect</h1>
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search posts… (Enter to search)"
+            value={searchInput}
+            onChange={handleSearchChange}
+            onKeyDown={handleSearchKeyDown}
+            className="w-full pl-8 pr-8 h-9 rounded-md border border-gray-300 bg-white text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          {searchInput && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
           <span className="text-sm text-gray-600">{user?.email}</span>
           <NotificationBell />
           <Button
@@ -400,7 +454,13 @@ export default function FeedPage() {
       <main className="mx-auto max-w-2xl px-4 py-8 space-y-4">
         <CreatePostForm onSuccess={invalidateFeed} />
 
-        <FilterPanel filters={filters} onChange={setFilters} />
+        {!searchActive && <FilterPanel filters={filters} onChange={setFilters} />}
+
+        {searchActive && (
+          <p className="text-sm text-gray-500">
+            Search results for <span className="font-medium text-gray-800">"{searchQuery}"</span>
+          </p>
+        )}
 
         {isLoading && (
           <div className="flex justify-center py-8">
@@ -414,7 +474,9 @@ export default function FeedPage() {
 
         {data && data.posts.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-8">
-            {hasActiveFilter
+            {searchActive
+              ? `No posts found for "${searchQuery}".`
+              : hasActiveFilter
               ? "No posts match the current filters."
               : "No posts yet. Be the first to ask something!"}
           </p>

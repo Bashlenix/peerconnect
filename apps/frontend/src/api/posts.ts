@@ -212,3 +212,28 @@ export async function deletePost(postId: string): Promise<void> {
     throw new Error(data.message ?? "Failed to delete post");
   }
 }
+
+export interface SearchPostsParams {
+  q: string;
+  limit?: number;
+  offset?: number;
+  category?: PostCategory;
+  since?: SinceFilter;
+}
+
+export async function searchPosts(params: SearchPostsParams): Promise<GetPostsResponse> {
+  const query = new URLSearchParams({ q: params.q });
+  if (params.limit != null) query.set("limit", String(params.limit));
+  if (params.offset != null) query.set("offset", String(params.offset));
+  if (params.category) query.set("category", params.category);
+  if (params.since) query.set("since", params.since);
+
+  const res = await fetch(`${BASE}/posts/search?${query}`, { credentials: "include" });
+
+  if (!res.ok) {
+    const data = (await res.json()) as { message?: string };
+    throw new Error(data.message ?? "Failed to search posts");
+  }
+
+  return res.json() as Promise<GetPostsResponse>;
+}

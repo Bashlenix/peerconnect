@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import { getFeedPosts } from "../modules/feed-query.js";
 import type { SinceFilter } from "../modules/feed-query.js";
+import { searchPosts } from "../modules/post-search.js";
 import type { NotificationType, PostCategory } from "../generated/prisma/client.js";
 import { sseManager } from "../modules/sse-manager.js";
 import { checkAndAwardBadges } from "../modules/badge-engine.js";
@@ -20,6 +21,14 @@ interface GetPostsQuery {
   category?: string;
   since?: string;
   subscribed?: boolean;
+}
+
+interface SearchPostsQuery {
+  q: string;
+  limit?: number;
+  offset?: number;
+  category?: string;
+  since?: string;
 }
 
 interface PostParamsOnly {
@@ -205,6 +214,60 @@ export async function postsRoute(app: FastifyInstance) {
         since: since as SinceFilter | undefined,
         subscribed,
         userId: request.user.userId,
+      });
+      return reply.status(200).send({ posts: posts.map(serializePost) });
+    }
+  );
+
+  // ─── GET /posts/search ───────────────────────────────────────────────────
+
+  app.get<{ Querystring: SearchPostsQuery }>(
+    "/posts/search",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Posts"],
+        summary: "Full-text search posts ranked by relevance",
+        querystring: {
+          type: "object",
+          required: ["q"],
+          properties: {
+            q: { type: "string", minLength: 1 },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+            offset: { type: "integer", minimum: 0, default: 0 },
+            category: { type: "string", enum: VALID_CATEGORIES },
+            since: { type: "string", enum: ["24h", "3d", "7d"] },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              posts: { type: "array", items: postSchema },
+            },
+            required: ["posts"],
+          },
+          400: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
+          401: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { q, limit = 20, offset = 0, category, since } = request.query;
+      const posts = await searchPosts(prisma, {
+        q,
+        limit,
+        offset,
+        category: category as PostCategory | undefined,
+        since: since as SinceFilter | undefined,
       });
       return reply.status(200).send({ posts: posts.map(serializePost) });
     }

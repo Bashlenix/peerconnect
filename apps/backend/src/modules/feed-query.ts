@@ -22,7 +22,7 @@ export interface FeedPost {
   replyCount: number;
 }
 
-function sinceDate(since: SinceFilter): Date {
+export function sinceDate(since: SinceFilter): Date {
   const msMap: Record<SinceFilter, number> = {
     "24h": 24 * 60 * 60 * 1000,
     "3d": 3 * 24 * 60 * 60 * 1000,
