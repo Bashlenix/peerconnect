@@ -61,3 +61,49 @@ export async function createPost(input: CreatePostInput): Promise<Post> {
 
   return data;
 }
+
+export interface Reply {
+  id: string;
+  content: string;
+  isSolution: boolean;
+  createdAt: string;
+  editedAt: string | null;
+  upvoteCount: number;
+  author: PostAuthor;
+}
+
+export interface GetRepliesResponse {
+  replies: Reply[];
+}
+
+export interface CreateReplyInput {
+  content: string;
+}
+
+export async function getReplies(postId: string): Promise<GetRepliesResponse> {
+  const res = await fetch(`${BASE}/posts/${postId}/replies`, { credentials: "include" });
+
+  if (!res.ok) {
+    const data = (await res.json()) as { message?: string };
+    throw new Error(data.message ?? "Failed to fetch replies");
+  }
+
+  return res.json() as Promise<GetRepliesResponse>;
+}
+
+export async function createReply(postId: string, input: CreateReplyInput): Promise<Reply> {
+  const res = await fetch(`${BASE}/posts/${postId}/replies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+
+  const data = (await res.json()) as Reply & { message?: string };
+
+  if (!res.ok) {
+    throw new Error(data.message ?? "Failed to create reply");
+  }
+
+  return data;
+}

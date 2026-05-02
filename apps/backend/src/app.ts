@@ -8,6 +8,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
 import { postsRoute } from "./routes/posts.js";
+import { repliesRoute } from "./routes/replies.js";
 
 declare module "@fastify/jwt" {
   interface FastifyJWT {
@@ -62,6 +63,7 @@ export async function buildApp() {
   await app.register(healthRoute);
   await app.register(authRoute);
   await app.register(postsRoute);
+  await app.register(repliesRoute);
 
   return app;
 }

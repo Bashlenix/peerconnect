@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, MessageSquare, Loader2 } from "lucide-react";
 import { logout } from "@/api/auth";
@@ -42,37 +42,39 @@ function authorName(author: Post["author"]): string {
 
 function PostCard({ post }: { post: Post }) {
   return (
-    <Card className={post.isUrgent ? "border-red-400" : ""}>
-      <CardContent className="pt-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-900">{authorName(post.author)}</span>
-            <span className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {post.isUrgent && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-red-600">
-                <AlertCircle className="w-3 h-3" />
-                Urgent
+    <Link to={`/posts/${post.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg">
+      <Card className={`hover:shadow-md transition-shadow cursor-pointer ${post.isUrgent ? "border-red-400" : ""}`}>
+        <CardContent className="pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900">{authorName(post.author)}</span>
+              <span className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {post.isUrgent && (
+                <span className="flex items-center gap-1 text-xs font-semibold text-red-600">
+                  <AlertCircle className="w-3 h-3" />
+                  Urgent
+                </span>
+              )}
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[post.category]}`}
+              >
+                {CATEGORIES.find((c) => c.value === post.category)?.label ?? post.category}
               </span>
-            )}
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[post.category]}`}
-            >
-              {CATEGORIES.find((c) => c.value === post.category)?.label ?? post.category}
-            </span>
+            </div>
           </div>
-        </div>
-        <p className="text-sm text-gray-700 whitespace-pre-wrap">{post.content}</p>
-        {post.editedAt && (
-          <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(post.editedAt)}</p>
-        )}
-        <div className="flex items-center gap-1 mt-3 text-xs text-gray-500">
-          <MessageSquare className="w-3.5 h-3.5" />
-          <span>{post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}</span>
-        </div>
-      </CardContent>
-    </Card>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{post.content}</p>
+          {post.editedAt && (
+            <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(post.editedAt)}</p>
+          )}
+          <div className="flex items-center gap-1 mt-3 text-xs text-gray-500">
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>{post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 

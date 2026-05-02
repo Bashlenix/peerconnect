@@ -6,6 +6,7 @@ import CheckEmailPage from "./pages/CheckEmailPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import LoginPage from "./pages/LoginPage";
 import FeedPage from "./pages/FeedPage";
+import PostDetailPage from "./pages/PostDetailPage";
 
 function AppRoutes() {
   useInitAuth();
@@ -21,6 +22,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <FeedPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/posts/:id"
+        element={
+          <ProtectedRoute>
+            <PostDetailPage />
           </ProtectedRoute>
         }
       />
