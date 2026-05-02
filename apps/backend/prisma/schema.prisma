@@ -60,6 +60,8 @@ model User {
   requiresManualReview    Boolean   @default(false)
   emailVerificationToken  String?
   emailVerificationExpiry DateTime?
+  refreshTokenHash        String?   @unique
+  refreshTokenExpiry      DateTime?
   universityId            String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt

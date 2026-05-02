@@ -200,3 +200,195 @@ describe("GET /auth/verify-email", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+// ─── POST /auth/login ─────────────────────────────────────────────────────────
+
+describe("POST /auth/login", () => {
+  async function registerAndVerify(email: string, password: string) {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email, password },
+    });
+    const user = await prisma.user.findUnique({ where: { email } });
+    await prisma.user.update({
+      where: { id: user!.id },
+      data: { isVerified: true, emailVerificationToken: null, emailVerificationExpiry: null },
+    });
+    return user!;
+  }
+
+  it("returns 200 and sets httpOnly cookies on valid credentials", async () => {
+    await registerAndVerify("login-ok@tu-berlin.de", "securePass1");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "login-ok@tu-berlin.de", password: "securePass1" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ user: { email: "login-ok@tu-berlin.de" } });
+
+    const cookies = res.headers["set-cookie"] as string | string[];
+    const cookieList = Array.isArray(cookies) ? cookies : [cookies];
+    expect(cookieList.some((c) => c.startsWith("access_token="))).toBe(true);
+    expect(cookieList.some((c) => c.startsWith("refresh_token="))).toBe(true);
+    expect(cookieList.every((c) => c.includes("HttpOnly"))).toBe(true);
+  });
+
+  it("returns 401 for wrong password", async () => {
+    await registerAndVerify("wrong-pass@tu-berlin.de", "securePass1");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "wrong-pass@tu-berlin.de", password: "wrongPassword" },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ message: expect.stringContaining("Invalid") });
+  });
+
+  it("returns 401 for non-existent email", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "nobody@tu-berlin.de", password: "securePass1" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("returns 403 for unverified account", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "unverified@tu-berlin.de", password: "securePass1" },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "unverified@tu-berlin.de", password: "securePass1" },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ message: expect.stringContaining("verify") });
+  });
+});
+
+// ─── GET /auth/me ─────────────────────────────────────────────────────────────
+
+describe("GET /auth/me", () => {
+  async function loginAndGetCookies(email: string, password: string) {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email, password },
+    });
+    const cookies = res.headers["set-cookie"] as string | string[];
+    return Array.isArray(cookies) ? cookies.join("; ") : cookies;
+  }
+
+  async function registerVerifyAndLogin(email: string, password: string) {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email, password },
+    });
+    const user = await prisma.user.findUnique({ where: { email } });
+    await prisma.user.update({
+      where: { id: user!.id },
+      data: { isVerified: true, emailVerificationToken: null, emailVerificationExpiry: null },
+    });
+    return loginAndGetCookies(email, password);
+  }
+
+  it("returns current user when access token is valid", async () => {
+    const cookieHeader = await registerVerifyAndLogin("me-ok@tu-berlin.de", "securePass1");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ user: { email: "me-ok@tu-berlin.de" } });
+  });
+
+  it("returns 401 when no cookies are present", async () => {
+    const res = await app.inject({ method: "GET", url: "/auth/me" });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("issues a new access token when access token is expired but refresh token is valid", async () => {
+    const cookieHeader = await registerVerifyAndLogin("me-refresh@tu-berlin.de", "securePass1");
+
+    // Extract just the refresh_token cookie
+    const allCookies = (Array.isArray(cookieHeader) ? cookieHeader : [cookieHeader]).flatMap((c) =>
+      c.split(";").map((p) => p.trim())
+    );
+    const refreshCookie = allCookies.find((c) => c.startsWith("refresh_token="));
+    expect(refreshCookie).toBeDefined();
+
+    // Call /auth/me with only the refresh cookie (no access token)
+    const res = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: { cookie: refreshCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ user: { email: "me-refresh@tu-berlin.de" } });
+
+    // A new access_token cookie should be set
+    const setCookies = res.headers["set-cookie"] as string | string[];
+    const setCookieList = Array.isArray(setCookies) ? setCookies : [setCookies ?? ""];
+    expect(setCookieList.some((c) => c.startsWith("access_token="))).toBe(true);
+  });
+});
+
+// ─── POST /auth/logout ───────────────────────────────────────────────────────
+
+describe("POST /auth/logout", () => {
+  it("clears auth cookies and removes refresh token from DB", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "logout@tu-berlin.de", password: "securePass1" },
+    });
+    const user = await prisma.user.findUnique({ where: { email: "logout@tu-berlin.de" } });
+    await prisma.user.update({
+      where: { id: user!.id },
+      data: { isVerified: true, emailVerificationToken: null, emailVerificationExpiry: null },
+    });
+
+    const loginRes = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "logout@tu-berlin.de", password: "securePass1" },
+    });
+    const cookies = loginRes.headers["set-cookie"] as string | string[];
+    const cookieHeader = Array.isArray(cookies) ? cookies.join("; ") : cookies;
+
+    const logoutRes = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(logoutRes.statusCode).toBe(200);
+
+    // Refresh token should be cleared from DB
+    const updatedUser = await prisma.user.findUnique({ where: { email: "logout@tu-berlin.de" } });
+    expect(updatedUser!.refreshTokenHash).toBeNull();
+
+    // Cookies should be cleared (empty value)
+    const setCookies = logoutRes.headers["set-cookie"] as string | string[];
+    const setCookieList = Array.isArray(setCookies) ? setCookies : [setCookies ?? ""];
+    expect(
+      setCookieList.some((c) => c.startsWith("access_token=;") || c.startsWith("access_token="))
+    ).toBe(true);
+  });
+});
