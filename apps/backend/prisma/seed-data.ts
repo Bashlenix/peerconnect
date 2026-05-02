@@ -1,3 +1,5 @@
+import { PrismaClient } from "../src/generated/prisma/client.js";
+
 export const UNIVERSITIES = [
   { name: "TU Dortmund University", domain: "uni-dortmund.de" },
   { name: "TU Berlin", domain: "tu-berlin.de" },
@@ -20,3 +22,8 @@ export const BADGES = [
   { name: "Trusted Helper", description: "Received 15 upvotes on your replies" },
   { name: "Solution Provider", description: "Had 5 replies marked as the accepted solution" },
 ];
+
+export async function seedReferenceData(prisma: PrismaClient): Promise<void> {
+  await prisma.university.createMany({ data: UNIVERSITIES, skipDuplicates: true });
+  await prisma.badge.createMany({ data: BADGES, skipDuplicates: true });
+}

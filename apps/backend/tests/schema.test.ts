@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
-import { UNIVERSITIES, BADGES } from "../prisma/seed-data.js";
+import { UNIVERSITIES, BADGES, seedReferenceData } from "../prisma/seed-data.js";
 
 const TEST_DB_URL =
   process.env["DATABASE_URL"] ?? "postgresql://bashi@localhost:5432/peerconnect_test";
@@ -15,16 +15,7 @@ beforeAll(async () => {
   const adapter = new PrismaPg(pool);
   prisma = new PrismaClient({ adapter });
 
-  await Promise.all(
-    UNIVERSITIES.map((uni) =>
-      prisma.university.upsert({ where: { domain: uni.domain }, update: {}, create: uni })
-    )
-  );
-  await Promise.all(
-    BADGES.map((badge) =>
-      prisma.badge.upsert({ where: { name: badge.name }, update: {}, create: badge })
-    )
-  );
+  await seedReferenceData(prisma);
 });
 
 afterAll(async () => {
@@ -58,11 +49,9 @@ describe("universities table", () => {
       .findMany({ select: { domain: true } })
       .then((rows) => rows.map((r) => r.domain));
 
-    expect(domains).toContain("uni-dortmund.de");
-    expect(domains).toContain("tu-berlin.de");
-    expect(domains).toContain("lmu.de");
-    expect(domains).toContain("uni-heidelberg.de");
-    expect(domains).toContain("rwth-aachen.de");
+    for (const { domain } of UNIVERSITIES) {
+      expect(domains).toContain(domain);
+    }
   });
 });
 
@@ -71,7 +60,7 @@ describe("universities table", () => {
 describe("badges table", () => {
   it("contains exactly 7 badge definitions", async () => {
     const count = await prisma.badge.count();
-    expect(count).toBe(7);
+    expect(count).toBe(BADGES.length);
   });
 
   it("has all required badge names", async () => {
@@ -79,13 +68,9 @@ describe("badges table", () => {
       .findMany({ select: { name: true } })
       .then((rows) => rows.map((r) => r.name));
 
-    expect(names).toContain("First Reply");
-    expect(names).toContain("Getting Started");
-    expect(names).toContain("Active Helper");
-    expect(names).toContain("Community Builder");
-    expect(names).toContain("Helpful Contributor");
-    expect(names).toContain("Trusted Helper");
-    expect(names).toContain("Solution Provider");
+    for (const { name } of BADGES) {
+      expect(names).toContain(name);
+    }
   });
 });
 
