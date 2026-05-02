@@ -4,6 +4,7 @@ import { Prisma } from "../generated/prisma/client.js";
 import type { NotificationType } from "../generated/prisma/client.js";
 import { getReplies } from "../modules/reply-query.js";
 import { sseManager } from "../modules/sse-manager.js";
+import { checkAndAwardBadges, type AwardedBadge } from "../modules/badge-engine.js";
 
 interface PostParams {
   id: string;
@@ -70,6 +71,19 @@ function serializeReply(reply: {
     hasUpvoted: reply.hasUpvoted,
     author: reply.author,
   };
+}
+
+function fireBadgeNotifications(userId: string, badges: AwardedBadge[]): void {
+  for (const badge of badges) {
+    void (async () => {
+      const notif = await prisma.notification.create({
+        data: { userId, type: "BADGE_AWARDED" as NotificationType },
+        select: { id: true },
+      });
+      sseManager.push(userId, "notification", { type: "BADGE_AWARDED", notificationId: notif.id });
+      sseManager.push(userId, "badge_awarded", { name: badge.name, description: badge.description });
+    })().catch(() => {});
+  }
 }
 
 export async function repliesRoute(app: FastifyInstance) {
@@ -148,17 +162,21 @@ export async function repliesRoute(app: FastifyInstance) {
       const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true, authorId: true } });
       if (!post) return reply.status(404).send({ message: "Post not found" });
 
-      const created = await prisma.reply.create({
-        data: { content, authorId, postId },
-        select: {
-          id: true,
-          content: true,
-          isSolution: true,
-          createdAt: true,
-          editedAt: true,
-          _count: { select: { upvotes: true } },
-          author: { select: { id: true, firstName: true, lastName: true } },
-        },
+      const [created, newBadges] = await prisma.$transaction(async (tx) => {
+        const c = await tx.reply.create({
+          data: { content, authorId, postId },
+          select: {
+            id: true,
+            content: true,
+            isSolution: true,
+            createdAt: true,
+            editedAt: true,
+            _count: { select: { upvotes: true } },
+            author: { select: { id: true, firstName: true, lastName: true } },
+          },
+        });
+        const badges = await checkAndAwardBadges(tx, authorId, "REPLY_CREATED");
+        return [c, badges] as const;
       });
 
       // Notify the post author if they didn't reply to their own post
@@ -179,6 +197,8 @@ export async function repliesRoute(app: FastifyInstance) {
           });
         })();
       }
+
+      fireBadgeNotifications(authorId, newBadges);
 
       return reply.status(201).send(
         serializeReply({ ...created, upvoteCount: created._count.upvotes, hasUpvoted: false })
@@ -222,14 +242,29 @@ export async function repliesRoute(app: FastifyInstance) {
       });
       if (!existing) return reply.status(404).send({ message: "Reply not found" });
 
-      try {
-        await prisma.upvote.create({ data: { userId, replyId } });
-      } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-          return reply.status(409).send({ message: "Already upvoted" });
+      type UpvoteResult =
+        | { alreadyUpvoted: true }
+        | { upvoteCount: number; newBadges: AwardedBadge[] };
+
+      const result: UpvoteResult = await prisma.$transaction(async (tx) => {
+        try {
+          await tx.upvote.create({ data: { userId, replyId } });
+        } catch (e) {
+          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+            return { alreadyUpvoted: true as const };
+          }
+          throw e;
         }
-        throw e;
+        const newBadges = await checkAndAwardBadges(tx, existing.authorId, "UPVOTE_RECEIVED");
+        const count = await tx.upvote.count({ where: { replyId } });
+        return { upvoteCount: count, newBadges };
+      });
+
+      if ("alreadyUpvoted" in result) {
+        return reply.status(409).send({ message: "Already upvoted" });
       }
+
+      const { upvoteCount, newBadges } = result;
 
       // Notify the reply author if they didn't upvote their own reply
       if (existing.authorId !== userId) {
@@ -250,7 +285,8 @@ export async function repliesRoute(app: FastifyInstance) {
         })();
       }
 
-      const upvoteCount = await prisma.upvote.count({ where: { replyId } });
+      fireBadgeNotifications(existing.authorId, newBadges);
+
       return reply.status(201).send({ upvoteCount });
     }
   );

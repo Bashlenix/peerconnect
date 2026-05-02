@@ -75,11 +75,16 @@ export function NotificationBell() {
     queryFn: () => getNotifications({ limit: 20 }),
   });
 
-  // SSE connection — invalidate query on new notification event
+  // SSE connection — invalidate queries on notification and badge events
   useEffect(() => {
     const es = new EventSource("/api/notifications/stream", { withCredentials: true });
     es.addEventListener("notification", () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+    es.addEventListener("badge_awarded", () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["profile"] });
+      void queryClient.invalidateQueries({ queryKey: ["publicProfile"] });
     });
     es.onerror = () => es.close();
     return () => es.close();

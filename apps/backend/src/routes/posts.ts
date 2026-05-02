@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 import { getFeedPosts } from "../modules/feed-query.js";
 import type { NotificationType, PostCategory } from "../generated/prisma/client.js";
 import { sseManager } from "../modules/sse-manager.js";
+import { checkAndAwardBadges } from "../modules/badge-engine.js";
 
 const VALID_CATEGORIES = ["Academic", "Social", "Sport", "DailyLifeSupport"] as const;
 
@@ -348,10 +349,11 @@ export async function postsRoute(app: FastifyInstance) {
       });
       if (!replyRecord) return reply.status(404).send({ message: "Reply not found" });
 
-      await prisma.$transaction([
-        prisma.reply.updateMany({ where: { postId, isSolution: true }, data: { isSolution: false } }),
-        prisma.reply.update({ where: { id: replyId }, data: { isSolution: true } }),
-      ]);
+      const newBadges = await prisma.$transaction(async (tx) => {
+        await tx.reply.updateMany({ where: { postId, isSolution: true }, data: { isSolution: false } });
+        await tx.reply.update({ where: { id: replyId }, data: { isSolution: true } });
+        return checkAndAwardBadges(tx, replyRecord.authorId, "SOLUTION_MARKED");
+      });
 
       // Notify the reply author if they're different from the post author
       if (replyRecord.authorId !== userId) {
@@ -370,6 +372,23 @@ export async function postsRoute(app: FastifyInstance) {
             notificationId: notif.id,
           });
         })();
+      }
+
+      for (const badge of newBadges) {
+        void (async () => {
+          const notif = await prisma.notification.create({
+            data: { userId: replyRecord.authorId, type: "BADGE_AWARDED" as NotificationType },
+            select: { id: true },
+          });
+          sseManager.push(replyRecord.authorId, "notification", {
+            type: "BADGE_AWARDED",
+            notificationId: notif.id,
+          });
+          sseManager.push(replyRecord.authorId, "badge_awarded", {
+            name: badge.name,
+            description: badge.description,
+          });
+        })().catch(() => {});
       }
 
       return reply.status(200).send({ replyId });
