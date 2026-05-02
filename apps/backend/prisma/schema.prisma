@@ -85,6 +85,7 @@ model Post {
   editedAt      DateTime?
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
+  // snake_case intentional: must match the DB-generated column name
   search_vector Unsupported("tsvector")?
 
   author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
