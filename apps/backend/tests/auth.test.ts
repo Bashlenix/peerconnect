@@ -76,6 +76,25 @@ describe("POST /auth/register", () => {
     expect(user!.emailVerificationToken).not.toBeNull();
   });
 
+  it("creates a free subscription for the registered user", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "sub-test@tu-berlin.de", password: "securePass1" },
+    });
+
+    const user = await prisma.user.findUnique({
+      where: { email: "sub-test@tu-berlin.de" },
+    });
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId: user!.id },
+    });
+
+    expect(subscription).not.toBeNull();
+    expect(subscription!.status).toBe("free");
+    expect(subscription!.endDate).toBeNull();
+  });
+
   it("creates a user with requiresManualReview=true for an unknown domain", async () => {
     const res = await app.inject({
       method: "POST",
@@ -315,6 +334,23 @@ describe("GET /auth/me", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ user: { email: "me-ok@tu-berlin.de" } });
+  });
+
+  it("includes subscription in the response with status free", async () => {
+    const cookieHeader = await registerVerifyAndLogin("me-sub@tu-berlin.de", "securePass1");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ user: { subscription: { status: string; startDate: string; endDate: string | null } } }>();
+    expect(body.user.subscription).not.toBeNull();
+    expect(body.user.subscription!.status).toBe("free");
+    expect(body.user.subscription!.startDate).toBeTruthy();
+    expect(body.user.subscription!.endDate).toBeNull();
   });
 
   it("returns 401 when no cookies are present", async () => {

@@ -1,38 +1,32 @@
-feat: Issue 07 — Post Edit & Delete
+feat: Issue 15 — Subscription Data Model
 
 Key decisions:
-- PATCH /posts/:id: protected; validates content minLength:1; 403 if requester is
-  not the author; sets editedAt = new Date() on update; returns full updated post
-  via shared serializePost helper; 404 for unknown post
-- DELETE /posts/:id: protected; 403 if not author; 409 if post._count.replies > 0
-  (checked in a single Prisma query with _count select); 204 on success; 404 for
-  unknown post
-- Routes registered before PATCH/DELETE /posts/:id/solution in postsRoute to keep
-  the file organized by resource then sub-resource
-- Frontend api/posts.ts: updatePost(postId, content) → Post, deletePost(postId) →
-  void; follow the same fetch/throw pattern as existing functions
-- FeedPage PostCard refactored from <Link> wrapper to Card with onClick for
-  navigation so author buttons can stopPropagation without nesting buttons in <a>
-- PostCard inline edit: controlled Textarea pre-filled with post.content; Cancel/Save
-  buttons; invalidates ['posts'] on success; editing state suppresses navigation click
-- PostCard delete: Trash2 button is disabled (opacity-40 + disabled attr) when
-  replyCount > 0 with tooltip; when 0 replies, clicking shows inline "Delete this
-  post? / Cancel / Delete" confirmation row; mutation navigates away via onUpdated
-- PostDetailPage: same edit/delete surface added to the post Card at the top;
-  delete navigates to /feed on success; Pencil/Trash2 hidden while editing or
-  confirming to prevent state overlap
+- Subscription model already existed in schema (no migration needed); Prisma
+  nested create used in POST /auth/register to atomically create user + free
+  subscription in a single DB round-trip (subscription: { create: {} })
+- GET /auth/me: extended Prisma select to include subscription relation; response
+  serialises startDate/endDate via .toISOString(); endDate serialises to null when
+  absent; subscription is null for legacy users with no subscription row
+- Swagger schema for /auth/me updated: subscription object is nullable with
+  status enum ["free","premium"], startDate (date-time), endDate (date-time, nullable)
+- Frontend AuthUser extended with Subscription interface { status, startDate,
+  endDate }; subscription: Subscription | null added to AuthUser
+- ProfilePage: "Subscription" section added between badges and notification
+  preferences; reads user.subscription from Zustand store (populated by /auth/me);
+  shows "Free plan" or "Premium"; shows expiry date only when endDate is set
 
 Files changed:
-- apps/backend/src/routes/posts.ts (PATCH /posts/:id, DELETE /posts/:id)
-- apps/backend/tests/posts.test.ts (10 new tests: edit success, 403, 404, 400
-  empty content, 401; delete success, 409 has-replies, 403, 404, 401)
-- apps/frontend/src/api/posts.ts (updatePost, deletePost)
-- apps/frontend/src/pages/FeedPage.tsx (PostCard refactored with edit/delete)
-- apps/frontend/src/pages/PostDetailPage.tsx (edit/delete on post section at top)
-- .ai/issues/done/07-post-edit-delete.md (moved to done)
+- apps/backend/src/routes/auth.ts (nested subscription create on register;
+  subscription included in GET /auth/me query + response + schema)
+- apps/backend/tests/auth.test.ts (2 new tests: subscription created on register,
+  /auth/me returns subscription with status free and null endDate)
+- apps/frontend/src/api/auth.ts (Subscription interface; subscription field on AuthUser)
+- apps/frontend/src/pages/ProfilePage.tsx (Subscription section in profile UI)
+- .ai/issues/done/15-subscription-data-model.md (moved to done)
 
 Blockers/notes:
-- All 130 tests pass (10 new); tsc --noEmit clean on backend and frontend
-- Issue 07 has no downstream blockers; Issues 06, 10, 13, 14, 15 remain
+- All 132 tests pass (2 new); tsc --noEmit clean on backend and frontend
+- Issue 15 has no downstream blockers; Issues 06, 10, 13, 14 remain
+- No payment UI or premium entitlement checks as specified in acceptance criteria
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

@@ -90,6 +90,7 @@ export async function authRoute(app: FastifyInstance) {
           passwordHash,
           universityId: domainResult.valid ? domainResult.university.id : null,
           requiresManualReview: !domainResult.valid,
+          subscription: { create: {} },
         },
         select: { id: true, requiresManualReview: true },
       });
@@ -252,8 +253,18 @@ export async function authRoute(app: FastifyInstance) {
                   firstName: { type: "string", nullable: true },
                   lastName: { type: "string", nullable: true },
                   isVerified: { type: "boolean" },
+                  subscription: {
+                    type: "object",
+                    nullable: true,
+                    properties: {
+                      status: { type: "string", enum: ["free", "premium"] },
+                      startDate: { type: "string", format: "date-time" },
+                      endDate: { type: "string", format: "date-time", nullable: true },
+                    },
+                    required: ["status", "startDate", "endDate"],
+                  },
                 },
-                required: ["id", "email", "isVerified"],
+                required: ["id", "email", "isVerified", "subscription"],
               },
             },
             required: ["user"],
@@ -295,7 +306,14 @@ export async function authRoute(app: FastifyInstance) {
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true, firstName: true, lastName: true, isVerified: true },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          isVerified: true,
+          subscription: { select: { status: true, startDate: true, endDate: true } },
+        },
       });
 
       if (!user) {
@@ -303,7 +321,22 @@ export async function authRoute(app: FastifyInstance) {
         return reply.status(401).send({ message: "Unauthorized" });
       }
 
-      return reply.status(200).send({ user });
+      return reply.status(200).send({
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          isVerified: user.isVerified,
+          subscription: user.subscription
+            ? {
+                status: user.subscription.status,
+                startDate: user.subscription.startDate.toISOString(),
+                endDate: user.subscription.endDate?.toISOString() ?? null,
+              }
+            : null,
+        },
+      });
     }
   );
 

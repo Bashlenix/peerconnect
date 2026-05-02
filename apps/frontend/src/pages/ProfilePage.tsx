@@ -220,6 +220,24 @@ export default function ProfilePage() {
         )}
 
         <div className="mt-8">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Subscription</h2>
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">Plan:</span>{" "}
+                {user?.subscription?.status === "premium" ? "Premium" : "Free plan"}
+              </p>
+              {user?.subscription?.endDate && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Expires:{" "}
+                  {new Date(user.subscription.endDate).toLocaleDateString()}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="mt-8">
           <h2 className="text-lg font-semibold text-gray-800 mb-1">Notification Preferences</h2>
           <p className="text-sm text-gray-500 mb-3">
             Receive notifications for new posts in the selected categories.

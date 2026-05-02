@@ -9,12 +9,19 @@ export interface VerifyEmailResponse {
   message: string;
 }
 
+export interface Subscription {
+  status: "free" | "premium";
+  startDate: string;
+  endDate: string | null;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
   isVerified: boolean;
+  subscription: Subscription | null;
 }
 
 export interface LoginResponse {
