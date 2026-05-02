@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import { getFeedPosts } from "../modules/feed-query.js";
-import type { PostCategory } from "../generated/prisma/client.js";
+import type { NotificationType, PostCategory } from "../generated/prisma/client.js";
+import { sseManager } from "../modules/sse-manager.js";
 
 const VALID_CATEGORIES = ["Academic", "Social", "Sport", "DailyLifeSupport"] as const;
 
@@ -124,6 +125,26 @@ export async function postsRoute(app: FastifyInstance) {
           _count: { select: { replies: true } },
         },
       });
+
+      // Notify users subscribed to this category (fire-and-forget)
+      void (async () => {
+        const prefs = await prisma.notificationPreference.findMany({
+          where: { category: category as PostCategory, NOT: { userId: authorId } },
+          select: { userId: true },
+        });
+        if (prefs.length > 0) {
+          await prisma.notification.createMany({
+            data: prefs.map((p) => ({
+              userId: p.userId,
+              type: "NEW_POST_IN_CATEGORY" as NotificationType,
+              postId: post.id,
+            })),
+          });
+          for (const { userId: uid } of prefs) {
+            sseManager.push(uid, "notification", { type: "NEW_POST_IN_CATEGORY" });
+          }
+        }
+      })();
 
       return reply.status(201).send(
         serializePost({
@@ -323,7 +344,7 @@ export async function postsRoute(app: FastifyInstance) {
 
       const replyRecord = await prisma.reply.findFirst({
         where: { id: replyId, postId },
-        select: { id: true },
+        select: { id: true, authorId: true },
       });
       if (!replyRecord) return reply.status(404).send({ message: "Reply not found" });
 
@@ -331,6 +352,25 @@ export async function postsRoute(app: FastifyInstance) {
         prisma.reply.updateMany({ where: { postId, isSolution: true }, data: { isSolution: false } }),
         prisma.reply.update({ where: { id: replyId }, data: { isSolution: true } }),
       ]);
+
+      // Notify the reply author if they're different from the post author
+      if (replyRecord.authorId !== userId) {
+        void (async () => {
+          const notif = await prisma.notification.create({
+            data: {
+              userId: replyRecord.authorId,
+              type: "REPLY_MARKED_SOLUTION" as NotificationType,
+              postId,
+              replyId,
+            },
+            select: { id: true },
+          });
+          sseManager.push(replyRecord.authorId, "notification", {
+            type: "REPLY_MARKED_SOLUTION",
+            notificationId: notif.id,
+          });
+        })();
+      }
 
       return reply.status(200).send({ replyId });
     }

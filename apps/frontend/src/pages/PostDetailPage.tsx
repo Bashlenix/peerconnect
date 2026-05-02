@@ -28,6 +28,7 @@ import {
   type PostCategory,
 } from "@/api/posts";
 import { useAuthStore } from "@/store/auth";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -368,6 +369,9 @@ export default function PostDetailPage() {
           Feed
         </Button>
         <h1 className="text-xl font-semibold">Thread</h1>
+        <div className="ml-auto">
+          <NotificationBell />
+        </div>
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-8 space-y-4">

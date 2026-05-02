@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import { Prisma } from "../generated/prisma/client.js";
+import type { NotificationType } from "../generated/prisma/client.js";
 import { getReplies } from "../modules/reply-query.js";
+import { sseManager } from "../modules/sse-manager.js";
 
 interface PostParams {
   id: string;
@@ -143,7 +145,7 @@ export async function repliesRoute(app: FastifyInstance) {
       const { content } = request.body;
       const authorId = request.user.userId;
 
-      const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
+      const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true, authorId: true } });
       if (!post) return reply.status(404).send({ message: "Post not found" });
 
       const created = await prisma.reply.create({
@@ -158,6 +160,25 @@ export async function repliesRoute(app: FastifyInstance) {
           author: { select: { id: true, firstName: true, lastName: true } },
         },
       });
+
+      // Notify the post author if they didn't reply to their own post
+      if (post.authorId !== authorId) {
+        void (async () => {
+          const notif = await prisma.notification.create({
+            data: {
+              userId: post.authorId,
+              type: "REPLY_TO_POST" as NotificationType,
+              postId,
+              replyId: created.id,
+            },
+            select: { id: true },
+          });
+          sseManager.push(post.authorId, "notification", {
+            type: "REPLY_TO_POST",
+            notificationId: notif.id,
+          });
+        })();
+      }
 
       return reply.status(201).send(
         serializeReply({ ...created, upvoteCount: created._count.upvotes, hasUpvoted: false })
@@ -195,7 +216,10 @@ export async function repliesRoute(app: FastifyInstance) {
       const { id: replyId } = request.params;
       const userId = request.user.userId;
 
-      const existing = await prisma.reply.findUnique({ where: { id: replyId }, select: { id: true } });
+      const existing = await prisma.reply.findUnique({
+        where: { id: replyId },
+        select: { id: true, authorId: true, postId: true },
+      });
       if (!existing) return reply.status(404).send({ message: "Reply not found" });
 
       try {
@@ -205,6 +229,25 @@ export async function repliesRoute(app: FastifyInstance) {
           return reply.status(409).send({ message: "Already upvoted" });
         }
         throw e;
+      }
+
+      // Notify the reply author if they didn't upvote their own reply
+      if (existing.authorId !== userId) {
+        void (async () => {
+          const notif = await prisma.notification.create({
+            data: {
+              userId: existing.authorId,
+              type: "REPLY_UPVOTED" as NotificationType,
+              postId: existing.postId,
+              replyId,
+            },
+            select: { id: true },
+          });
+          sseManager.push(existing.authorId, "notification", {
+            type: "REPLY_UPVOTED",
+            notificationId: notif.id,
+          });
+        })();
       }
 
       const upvoteCount = await prisma.upvote.count({ where: { replyId } });

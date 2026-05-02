@@ -5,6 +5,7 @@ import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2 } from "lucide-reac
 import { logout } from "@/api/auth";
 import { getPosts, createPost, updatePost, deletePost, type PostCategory, type Post } from "@/api/posts";
 import { useAuthStore } from "@/store/auth";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -294,8 +295,9 @@ export default function FeedPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">PeerConnect</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600">{user?.email}</span>
+          <NotificationBell />
           <Button
             variant="outline"
             size="sm"

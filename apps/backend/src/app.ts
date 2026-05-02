@@ -10,6 +10,7 @@ import { authRoute } from "./routes/auth.js";
 import { postsRoute } from "./routes/posts.js";
 import { repliesRoute } from "./routes/replies.js";
 import { usersRoute } from "./routes/users.js";
+import { notificationsRoute } from "./routes/notifications.js";
 
 declare module "@fastify/jwt" {
   interface FastifyJWT {
@@ -66,6 +67,7 @@ export async function buildApp() {
   await app.register(postsRoute);
   await app.register(repliesRoute);
   await app.register(usersRoute);
+  await app.register(notificationsRoute);
 
   return app;
 }
