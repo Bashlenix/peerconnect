@@ -381,3 +381,189 @@ describe("GET /posts", () => {
     expect(page1.json().posts[0].id).not.toBe(page2.json().posts[0].id);
   });
 });
+
+// ─── PATCH /posts/:id/solution ────────────────────────────────────────────────
+
+describe("PATCH /posts/:id/solution", () => {
+  it("marks a reply as solution and returns 200 with replyId", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("sol-set@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/posts/${post.id}/solution`,
+      headers: { cookie: cookieHeader },
+      payload: { replyId: r.id },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().replyId).toBe(r.id);
+
+    const updated = await prisma.reply.findUnique({ where: { id: r.id }, select: { isSolution: true } });
+    expect(updated?.isSolution).toBe(true);
+  });
+
+  it("replaces a previous solution with the new one", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("sol-replace@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r1 = await prisma.reply.create({
+      data: { content: "Old answer", authorId: userId, postId: post.id, isSolution: true },
+      select: { id: true },
+    });
+    const r2 = await prisma.reply.create({
+      data: { content: "Better answer", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    await app.inject({
+      method: "PATCH",
+      url: `/posts/${post.id}/solution`,
+      headers: { cookie: cookieHeader },
+      payload: { replyId: r2.id },
+    });
+
+    const old = await prisma.reply.findUnique({ where: { id: r1.id }, select: { isSolution: true } });
+    const newer = await prisma.reply.findUnique({ where: { id: r2.id }, select: { isSolution: true } });
+    expect(old?.isSolution).toBe(false);
+    expect(newer?.isSolution).toBe(true);
+  });
+
+  it("returns 403 if requester is not the post author", async () => {
+    const { userId } = await registerVerifyAndLogin("sol-owner@tu-berlin.de");
+    const { cookieHeader: otherCookie } = await registerVerifyAndLogin("sol-other@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/posts/${post.id}/solution`,
+      headers: { cookie: otherCookie },
+      payload: { replyId: r.id },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("returns 404 for non-existent post", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("sol-404post@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/posts/nonexistent/solution",
+      headers: { cookie: cookieHeader },
+      payload: { replyId: "some-reply" },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 404 when reply does not belong to the post", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("sol-wrongpost@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const otherPost = await prisma.post.create({
+      data: { content: "Other", category: "Social", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: otherPost.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/posts/${post.id}/solution`,
+      headers: { cookie: cookieHeader },
+      payload: { replyId: r.id },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated request", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/posts/some-id/solution",
+      payload: { replyId: "some-reply" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// ─── DELETE /posts/:id/solution ───────────────────────────────────────────────
+
+describe("DELETE /posts/:id/solution", () => {
+  it("unmarks the current solution and returns 204", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("unsol@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id, isSolution: true },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/posts/${post.id}/solution`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(204);
+    const updated = await prisma.reply.findUnique({ where: { id: r.id }, select: { isSolution: true } });
+    expect(updated?.isSolution).toBe(false);
+  });
+
+  it("returns 403 if requester is not the post author", async () => {
+    const { userId } = await registerVerifyAndLogin("unsol-owner@tu-berlin.de");
+    const { cookieHeader: otherCookie } = await registerVerifyAndLogin("unsol-other@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/posts/${post.id}/solution`,
+      headers: { cookie: otherCookie },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("returns 404 for non-existent post", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("unsol-404@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/posts/nonexistent/solution",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated request", async () => {
+    const res = await app.inject({ method: "DELETE", url: "/posts/some-id/solution" });
+    expect(res.statusCode).toBe(401);
+  });
+});

@@ -16,6 +16,14 @@ interface GetPostsQuery {
   offset?: number;
 }
 
+interface PostParamsOnly {
+  id: string;
+}
+
+interface SetSolutionBody {
+  replyId: string;
+}
+
 const postSchema = {
   type: "object" as const,
   properties: {
@@ -159,6 +167,102 @@ export async function postsRoute(app: FastifyInstance) {
       const { limit = 20, offset = 0 } = request.query;
       const posts = await getFeedPosts(prisma, { limit, offset });
       return reply.status(200).send({ posts: posts.map(serializePost) });
+    }
+  );
+
+  // ─── PATCH /posts/:id/solution ────────────────────────────────────────────
+
+  app.patch<{ Params: PostParamsOnly; Body: SetSolutionBody }>(
+    "/posts/:id/solution",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Posts"],
+        summary: "Mark a reply as the accepted solution for a post",
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string" } },
+        },
+        body: {
+          type: "object",
+          required: ["replyId"],
+          properties: { replyId: { type: "string" } },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: { replyId: { type: "string" } },
+            required: ["replyId"],
+          },
+          401: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          403: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          404: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: postId } = request.params;
+      const { replyId } = request.body;
+      const userId = request.user.userId;
+
+      const post = await prisma.post.findUnique({
+        where: { id: postId },
+        select: { id: true, authorId: true },
+      });
+      if (!post) return reply.status(404).send({ message: "Post not found" });
+      if (post.authorId !== userId) return reply.status(403).send({ message: "Forbidden" });
+
+      const replyRecord = await prisma.reply.findFirst({
+        where: { id: replyId, postId },
+        select: { id: true },
+      });
+      if (!replyRecord) return reply.status(404).send({ message: "Reply not found" });
+
+      await prisma.$transaction([
+        prisma.reply.updateMany({ where: { postId, isSolution: true }, data: { isSolution: false } }),
+        prisma.reply.update({ where: { id: replyId }, data: { isSolution: true } }),
+      ]);
+
+      return reply.status(200).send({ replyId });
+    }
+  );
+
+  // ─── DELETE /posts/:id/solution ───────────────────────────────────────────
+
+  app.delete<{ Params: PostParamsOnly }>(
+    "/posts/:id/solution",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Posts"],
+        summary: "Unmark the accepted solution for a post",
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string" } },
+        },
+        response: {
+          204: { type: "null" },
+          401: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          403: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          404: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: postId } = request.params;
+      const userId = request.user.userId;
+
+      const post = await prisma.post.findUnique({
+        where: { id: postId },
+        select: { id: true, authorId: true },
+      });
+      if (!post) return reply.status(404).send({ message: "Post not found" });
+      if (post.authorId !== userId) return reply.status(403).send({ message: "Forbidden" });
+
+      await prisma.reply.updateMany({ where: { postId, isSolution: true }, data: { isSolution: false } });
+      return reply.status(204).send();
     }
   );
 }

@@ -1,8 +1,31 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle, Loader2, MessageSquare, ThumbsUp, AlertCircle } from "lucide-react";
-import { getPosts, getReplies, createReply, type Post, type Reply, type PostCategory } from "@/api/posts";
+import {
+  ArrowLeft,
+  CheckCircle,
+  Loader2,
+  MessageSquare,
+  ThumbsUp,
+  AlertCircle,
+  Pencil,
+  Trash2,
+} from "lucide-react";
+import {
+  getPosts,
+  getReplies,
+  createReply,
+  upvoteReply,
+  removeUpvote,
+  updateReply,
+  deleteReply,
+  setSolution,
+  removeSolution,
+  type Post,
+  type Reply,
+  type PostCategory,
+} from "@/api/posts";
+import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,7 +61,57 @@ function authorName(author: Post["author"]): string {
   return "Anonymous";
 }
 
-function ReplyCard({ reply }: { reply: Reply }) {
+interface ReplyCardProps {
+  reply: Reply;
+  postId: string;
+  postAuthorId: string;
+  currentUserId: string;
+  onUpdated: () => void;
+}
+
+function ReplyCard({ reply, postId, postAuthorId, currentUserId, onUpdated }: ReplyCardProps) {
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState(reply.content);
+
+  const isAuthor = reply.author.id === currentUserId;
+  const isPostAuthor = postAuthorId === currentUserId;
+
+  const upvoteMutation = useMutation({
+    mutationFn: async (): Promise<void> => {
+      if (reply.hasUpvoted) {
+        await removeUpvote(reply.id);
+      } else {
+        await upvoteReply(reply.id);
+      }
+    },
+    onSuccess: () => onUpdated(),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (content: string) => updateReply(reply.id, content),
+    onSuccess: () => {
+      setEditing(false);
+      onUpdated();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteReply(reply.id),
+    onSuccess: () => onUpdated(),
+  });
+
+  const solutionMutation = useMutation({
+    mutationFn: () =>
+      reply.isSolution ? removeSolution(postId) : setSolution(postId, reply.id),
+    onSuccess: () => onUpdated(),
+  });
+
+  function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editContent.trim()) return;
+    editMutation.mutate(editContent.trim());
+  }
+
   return (
     <Card className={reply.isSolution ? "border-green-400" : ""}>
       <CardContent className="pt-4">
@@ -47,20 +120,107 @@ function ReplyCard({ reply }: { reply: Reply }) {
             <span className="text-sm font-medium text-gray-900">{authorName(reply.author)}</span>
             <span className="text-xs text-gray-400">{formatTimeAgo(reply.createdAt)}</span>
           </div>
-          {reply.isSolution && (
-            <span className="flex items-center gap-1 text-xs font-semibold text-green-600">
-              <CheckCircle className="w-3.5 h-3.5" />
-              Accepted solution
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {reply.isSolution && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-green-600">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Accepted solution
+              </span>
+            )}
+            {isPostAuthor && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`text-xs h-7 px-2 ${reply.isSolution ? "text-green-600" : "text-gray-500"}`}
+                onClick={() => solutionMutation.mutate()}
+                disabled={solutionMutation.isPending}
+              >
+                {reply.isSolution ? "Unmark" : "Mark as solution"}
+              </Button>
+            )}
+            {isAuthor && !editing && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                  onClick={() => {
+                    setEditContent(reply.content);
+                    setEditing(true);
+                  }}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                {!reply.isSolution && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-gray-400 hover:text-red-500"
+                    onClick={() => deleteMutation.mutate()}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
-        <p className="text-sm text-gray-700 whitespace-pre-wrap">{reply.content}</p>
-        {reply.editedAt && (
-          <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(reply.editedAt)}</p>
+
+        {editing ? (
+          <form onSubmit={handleEditSubmit} className="space-y-2">
+            <Textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={3}
+              disabled={editMutation.isPending}
+            />
+            <div className="flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditing(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={editMutation.isPending || !editContent.trim()}
+              >
+                {editMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+            {editMutation.isError && (
+              <p className="text-xs text-red-600">{editMutation.error.message}</p>
+            )}
+          </form>
+        ) : (
+          <>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{reply.content}</p>
+            {reply.editedAt && (
+              <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(reply.editedAt)}</p>
+            )}
+          </>
         )}
-        <div className="flex items-center gap-1 mt-3 text-xs text-gray-500">
-          <ThumbsUp className="w-3.5 h-3.5" />
-          <span>{reply.upvoteCount}</span>
+
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            onClick={() => upvoteMutation.mutate()}
+            disabled={upvoteMutation.isPending}
+            className={`flex items-center gap-1 text-xs rounded px-1.5 py-0.5 transition-colors ${
+              reply.hasUpvoted
+                ? "text-blue-600 bg-blue-50 hover:bg-blue-100"
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            <ThumbsUp className={`w-3.5 h-3.5 ${reply.hasUpvoted ? "fill-current" : ""}`} />
+            <span>{reply.upvoteCount}</span>
+          </button>
+          {deleteMutation.isError && (
+            <span className="text-xs text-red-600">{deleteMutation.error.message}</span>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -130,6 +290,7 @@ export default function PostDetailPage() {
   const { id: postId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
 
   const { data: feedData, isLoading: feedLoading } = useQuery({
     queryKey: ["posts"],
@@ -238,8 +399,15 @@ export default function PostDetailPage() {
           </p>
         )}
 
-        {repliesData && repliesData.replies.map((reply) => (
-          <ReplyCard key={reply.id} reply={reply} />
+        {repliesData && currentUser && repliesData.replies.map((reply) => (
+          <ReplyCard
+            key={reply.id}
+            reply={reply}
+            postId={post.id}
+            postAuthorId={post.author.id}
+            currentUserId={currentUser.id}
+            onUpdated={invalidateReplies}
+          />
         ))}
 
         {/* Reply form */}

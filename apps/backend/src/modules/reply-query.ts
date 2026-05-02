@@ -7,10 +7,15 @@ export interface ReplyItem {
   createdAt: Date;
   editedAt: Date | null;
   upvoteCount: number;
+  hasUpvoted: boolean;
   author: { id: string; firstName: string | null; lastName: string | null };
 }
 
-export async function getReplies(prisma: PrismaClient, postId: string): Promise<ReplyItem[]> {
+export async function getReplies(
+  prisma: PrismaClient,
+  postId: string,
+  userId?: string
+): Promise<ReplyItem[]> {
   const replies = await prisma.reply.findMany({
     where: { postId },
     orderBy: [
@@ -29,6 +34,15 @@ export async function getReplies(prisma: PrismaClient, postId: string): Promise<
     },
   });
 
+  let upvotedReplyIds = new Set<string>();
+  if (userId && replies.length > 0) {
+    const upvotes = await prisma.upvote.findMany({
+      where: { userId, replyId: { in: replies.map((r) => r.id) } },
+      select: { replyId: true },
+    });
+    upvotedReplyIds = new Set(upvotes.map((u) => u.replyId));
+  }
+
   return replies.map((r) => ({
     id: r.id,
     content: r.content,
@@ -36,6 +50,7 @@ export async function getReplies(prisma: PrismaClient, postId: string): Promise<
     createdAt: r.createdAt,
     editedAt: r.editedAt,
     upvoteCount: r._count.upvotes,
+    hasUpvoted: upvotedReplyIds.has(r.id),
     author: r.author,
   }));
 }

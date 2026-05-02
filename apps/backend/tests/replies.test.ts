@@ -353,3 +353,323 @@ describe("POST /posts/:id/replies", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+// ─── GET /posts/:id/replies — hasUpvoted ─────────────────────────────────────
+
+describe("GET /posts/:id/replies — hasUpvoted", () => {
+  it("returns hasUpvoted:true for a reply the current user upvoted", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("hup-true@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+    await prisma.upvote.create({ data: { userId, replyId: r.id } });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/posts/${post.id}/replies`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().replies[0].hasUpvoted).toBe(true);
+  });
+
+  it("returns hasUpvoted:false when the user has not upvoted", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("hup-false@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/posts/${post.id}/replies`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().replies[0].hasUpvoted).toBe(false);
+  });
+});
+
+// ─── POST /replies/:id/upvote ─────────────────────────────────────────────────
+
+describe("POST /replies/:id/upvote", () => {
+  it("adds an upvote and returns 201 with updated upvoteCount", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("upvote-add@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/replies/${r.id}/upvote`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().upvoteCount).toBe(1);
+  });
+
+  it("returns 409 if user has already upvoted", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("upvote-dup@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+    await prisma.upvote.create({ data: { userId, replyId: r.id } });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/replies/${r.id}/upvote`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toBe("Already upvoted");
+  });
+
+  it("returns 404 for non-existent reply", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("upvote-404@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/replies/nonexistent/upvote",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated request", async () => {
+    const res = await app.inject({ method: "POST", url: "/replies/some-id/upvote" });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// ─── DELETE /replies/:id/upvote ───────────────────────────────────────────────
+
+describe("DELETE /replies/:id/upvote", () => {
+  it("removes an upvote and returns 204", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("unvote@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+    await prisma.upvote.create({ data: { userId, replyId: r.id } });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/replies/${r.id}/upvote`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(204);
+    const count = await prisma.upvote.count({ where: { replyId: r.id } });
+    expect(count).toBe(0);
+  });
+
+  it("returns 404 when upvote does not exist", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("unvote-404@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/replies/${r.id}/upvote`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated request", async () => {
+    const res = await app.inject({ method: "DELETE", url: "/replies/some-id/upvote" });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// ─── PATCH /replies/:id ───────────────────────────────────────────────────────
+
+describe("PATCH /replies/:id", () => {
+  it("updates reply content and returns 200 with updated reply", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("edit-reply@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "Original", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/replies/${r.id}`,
+      headers: { cookie: cookieHeader },
+      payload: { content: "Updated content" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.content).toBe("Updated content");
+    expect(body.editedAt).toBeDefined();
+    expect(body.editedAt).not.toBeNull();
+  });
+
+  it("returns 403 if not the reply author", async () => {
+    const { cookieHeader: authorCookie, userId } = await registerVerifyAndLogin("edit-owner@tu-berlin.de");
+    const { cookieHeader: otherCookie } = await registerVerifyAndLogin("edit-other@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "Original", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+    void authorCookie;
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/replies/${r.id}`,
+      headers: { cookie: otherCookie },
+      payload: { content: "Hijacked" },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("returns 404 for non-existent reply", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("edit-404@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/replies/nonexistent",
+      headers: { cookie: cookieHeader },
+      payload: { content: "Content" },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated request", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/replies/some-id",
+      payload: { content: "Content" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// ─── DELETE /replies/:id ──────────────────────────────────────────────────────
+
+describe("DELETE /replies/:id", () => {
+  it("deletes the reply and returns 204", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("del-reply@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/replies/${r.id}`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(204);
+    const count = await prisma.reply.count({ where: { id: r.id } });
+    expect(count).toBe(0);
+  });
+
+  it("returns 409 when reply is the accepted solution", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("del-solution@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id, isSolution: true },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/replies/${r.id}`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("returns 403 if not the reply author", async () => {
+    const { userId } = await registerVerifyAndLogin("del-owner@tu-berlin.de");
+    const { cookieHeader: otherCookie } = await registerVerifyAndLogin("del-other@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Q", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    const r = await prisma.reply.create({
+      data: { content: "A", authorId: userId, postId: post.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/replies/${r.id}`,
+      headers: { cookie: otherCookie },
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("returns 404 for non-existent reply", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("del-404@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/replies/nonexistent",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated request", async () => {
+    const res = await app.inject({ method: "DELETE", url: "/replies/some-id" });
+    expect(res.statusCode).toBe(401);
+  });
+});
