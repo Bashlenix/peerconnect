@@ -21,6 +21,8 @@ import {
   deleteReply,
   setSolution,
   removeSolution,
+  updatePost,
+  deletePost,
   type Post,
   type Reply,
   type PostCategory,
@@ -292,6 +294,10 @@ export default function PostDetailPage() {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
 
+  const [editingPost, setEditingPost] = useState(false);
+  const [editPostContent, setEditPostContent] = useState("");
+  const [confirmDeletePost, setConfirmDeletePost] = useState(false);
+
   const { data: feedData, isLoading: feedLoading } = useQuery({
     queryKey: ["posts"],
     queryFn: () => getPosts({ limit: 100 }),
@@ -308,6 +314,22 @@ export default function PostDetailPage() {
   });
 
   const post = feedData?.posts.find((p) => p.id === postId);
+
+  const editPostMutation = useMutation({
+    mutationFn: (content: string) => updatePost(postId!, content),
+    onSuccess: () => {
+      setEditingPost(false);
+      void queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: () => deletePost(postId!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["posts"] });
+      navigate("/feed", { replace: true });
+    },
+  });
 
   function invalidateReplies() {
     void queryClient.invalidateQueries({ queryKey: ["replies", postId] });
@@ -369,16 +391,93 @@ export default function PostDetailPage() {
                 >
                   {CATEGORY_LABELS[post.category] ?? post.category}
                 </span>
+                {currentUser?.id === post.author.id && !editingPost && !confirmDeletePost && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                      onClick={() => { setEditPostContent(post.content); setEditingPost(true); }}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-7 w-7 p-0 text-gray-400 hover:text-red-500 ${post.replyCount > 0 ? "opacity-40 cursor-not-allowed" : ""}`}
+                      onClick={() => { if (post.replyCount === 0) setConfirmDeletePost(true); }}
+                      title={post.replyCount > 0 ? "Cannot delete a post with replies" : "Delete post"}
+                      disabled={post.replyCount > 0}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{post.content}</p>
-            {post.editedAt && (
-              <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(post.editedAt)}</p>
+
+            {editingPost ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!editPostContent.trim()) return;
+                  editPostMutation.mutate(editPostContent.trim());
+                }}
+                className="space-y-2"
+              >
+                <Textarea
+                  value={editPostContent}
+                  onChange={(e) => setEditPostContent(e.target.value)}
+                  rows={4}
+                  disabled={editPostMutation.isPending}
+                />
+                <div className="flex gap-2 justify-end">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditingPost(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm" disabled={editPostMutation.isPending || !editPostContent.trim()}>
+                    {editPostMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
+                {editPostMutation.isError && (
+                  <p className="text-xs text-red-600">{editPostMutation.error.message}</p>
+                )}
+              </form>
+            ) : (
+              <>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{post.content}</p>
+                {post.editedAt && (
+                  <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(post.editedAt)}</p>
+                )}
+              </>
             )}
-            <div className="flex items-center gap-1 mt-3 text-xs text-gray-500">
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>{post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}</span>
-            </div>
+
+            {confirmDeletePost && (
+              <div className="mt-3 flex items-center gap-3">
+                <span className="text-sm text-gray-700">Delete this post?</span>
+                <Button variant="outline" size="sm" onClick={() => setConfirmDeletePost(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => deletePostMutation.mutate()}
+                  disabled={deletePostMutation.isPending}
+                >
+                  {deletePostMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Delete"}
+                </Button>
+                {deletePostMutation.isError && (
+                  <span className="text-xs text-red-600">{deletePostMutation.error.message}</span>
+                )}
+              </div>
+            )}
+
+            {!editingPost && (
+              <div className="flex items-center gap-1 mt-3 text-xs text-gray-500">
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>{post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 

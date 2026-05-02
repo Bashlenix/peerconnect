@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, MessageSquare, Loader2 } from "lucide-react";
+import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2 } from "lucide-react";
 import { logout } from "@/api/auth";
-import { getPosts, createPost, type PostCategory, type Post } from "@/api/posts";
+import { getPosts, createPost, updatePost, deletePost, type PostCategory, type Post } from "@/api/posts";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,41 +40,155 @@ function authorName(author: Post["author"]): string {
   return "Anonymous";
 }
 
-function PostCard({ post }: { post: Post }) {
+interface PostCardProps {
+  post: Post;
+  currentUserId: string | undefined;
+  onUpdated: () => void;
+}
+
+function PostCard({ post, currentUserId, onUpdated }: PostCardProps) {
+  const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState(post.content);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const isAuthor = currentUserId === post.author.id;
+
+  const editMutation = useMutation({
+    mutationFn: (content: string) => updatePost(post.id, content),
+    onSuccess: () => {
+      setEditing(false);
+      onUpdated();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deletePost(post.id),
+    onSuccess: () => {
+      setConfirmDelete(false);
+      onUpdated();
+    },
+  });
+
+  function handleCardClick() {
+    if (!editing && !confirmDelete) navigate(`/posts/${post.id}`);
+  }
+
+  function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editContent.trim()) return;
+    editMutation.mutate(editContent.trim());
+  }
+
   return (
-    <Link to={`/posts/${post.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg">
-      <Card className={`hover:shadow-md transition-shadow cursor-pointer ${post.isUrgent ? "border-red-400" : ""}`}>
-        <CardContent className="pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-900">{authorName(post.author)}</span>
-              <span className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {post.isUrgent && (
-                <span className="flex items-center gap-1 text-xs font-semibold text-red-600">
-                  <AlertCircle className="w-3 h-3" />
-                  Urgent
-                </span>
-              )}
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[post.category]}`}
-              >
-                {CATEGORIES.find((c) => c.value === post.category)?.label ?? post.category}
-              </span>
-            </div>
+    <Card
+      className={`hover:shadow-md transition-shadow ${!editing && !confirmDelete ? "cursor-pointer" : ""} ${post.isUrgent ? "border-red-400" : ""}`}
+      onClick={handleCardClick}
+    >
+      <CardContent className="pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-900">{authorName(post.author)}</span>
+            <span className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</span>
           </div>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{post.content}</p>
-          {post.editedAt && (
-            <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(post.editedAt)}</p>
-          )}
+          <div className="flex items-center gap-2">
+            {post.isUrgent && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-red-600">
+                <AlertCircle className="w-3 h-3" />
+                Urgent
+              </span>
+            )}
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[post.category]}`}
+            >
+              {CATEGORIES.find((c) => c.value === post.category)?.label ?? post.category}
+            </span>
+            {isAuthor && !editing && !confirmDelete && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-gray-400 hover:text-gray-600"
+                  onClick={(e) => { e.stopPropagation(); setEditContent(post.content); setEditing(true); }}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 w-7 p-0 text-gray-400 hover:text-red-500 ${post.replyCount > 0 ? "opacity-40 cursor-not-allowed" : ""}`}
+                  onClick={(e) => { e.stopPropagation(); if (post.replyCount === 0) setConfirmDelete(true); }}
+                  title={post.replyCount > 0 ? "Cannot delete a post with replies" : "Delete post"}
+                  disabled={post.replyCount > 0}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {editing ? (
+          <form onSubmit={handleEditSubmit} className="space-y-2" onClick={(e) => e.stopPropagation()}>
+            <Textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={3}
+              disabled={editMutation.isPending}
+            />
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={editMutation.isPending || !editContent.trim()}>
+                {editMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+            {editMutation.isError && (
+              <p className="text-xs text-red-600">{editMutation.error.message}</p>
+            )}
+          </form>
+        ) : (
+          <>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{post.content}</p>
+            {post.editedAt && (
+              <p className="text-xs text-gray-400 mt-1">edited {formatTimeAgo(post.editedAt)}</p>
+            )}
+          </>
+        )}
+
+        {confirmDelete && (
+          <div className="mt-3 flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <span className="text-sm text-gray-700">Delete this post?</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDelete(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Delete"}
+            </Button>
+            {deleteMutation.isError && (
+              <span className="text-xs text-red-600">{deleteMutation.error.message}</span>
+            )}
+          </div>
+        )}
+
+        {!editing && (
           <div className="flex items-center gap-1 mt-3 text-xs text-gray-500">
             <MessageSquare className="w-3.5 h-3.5" />
             <span>{post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}</span>
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -212,7 +326,14 @@ export default function FeedPage() {
           </p>
         )}
 
-        {data && data.posts.map((post) => <PostCard key={post.id} post={post} />)}
+        {data && data.posts.map((post) => (
+          <PostCard
+            key={post.id}
+            post={post}
+            currentUserId={user?.id}
+            onUpdated={invalidateFeed}
+          />
+        ))}
       </main>
     </div>
   );

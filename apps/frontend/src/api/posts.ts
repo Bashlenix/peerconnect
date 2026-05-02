@@ -176,3 +176,26 @@ export async function removeSolution(postId: string): Promise<void> {
     throw new Error(data.message ?? "Failed to unmark solution");
   }
 }
+
+export async function updatePost(postId: string, content: string): Promise<Post> {
+  const res = await fetch(`${BASE}/posts/${postId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+  const data = (await res.json()) as Post & { message?: string };
+  if (!res.ok) throw new Error(data.message ?? "Failed to update post");
+  return data;
+}
+
+export async function deletePost(postId: string): Promise<void> {
+  const res = await fetch(`${BASE}/posts/${postId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const data = (await res.json()) as { message?: string };
+    throw new Error(data.message ?? "Failed to delete post");
+  }
+}

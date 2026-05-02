@@ -20,6 +20,10 @@ interface PostParamsOnly {
   id: string;
 }
 
+interface UpdatePostBody {
+  content: string;
+}
+
 interface SetSolutionBody {
   replyId: string;
 }
@@ -167,6 +171,110 @@ export async function postsRoute(app: FastifyInstance) {
       const { limit = 20, offset = 0 } = request.query;
       const posts = await getFeedPosts(prisma, { limit, offset });
       return reply.status(200).send({ posts: posts.map(serializePost) });
+    }
+  );
+
+  // ─── PATCH /posts/:id ────────────────────────────────────────────────────
+
+  app.patch<{ Params: PostParamsOnly; Body: UpdatePostBody }>(
+    "/posts/:id",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Posts"],
+        summary: "Edit a post's content",
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string" } },
+        },
+        body: {
+          type: "object",
+          required: ["content"],
+          properties: { content: { type: "string", minLength: 1 } },
+        },
+        response: {
+          200: postSchema,
+          401: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          403: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          404: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const { content } = request.body;
+      const userId = request.user.userId;
+
+      const post = await prisma.post.findUnique({
+        where: { id },
+        select: { id: true, authorId: true },
+      });
+      if (!post) return reply.status(404).send({ message: "Post not found" });
+      if (post.authorId !== userId) return reply.status(403).send({ message: "Forbidden" });
+
+      const updated = await prisma.post.update({
+        where: { id },
+        data: { content, editedAt: new Date() },
+        select: {
+          id: true,
+          content: true,
+          category: true,
+          isUrgent: true,
+          createdAt: true,
+          editedAt: true,
+          author: { select: { id: true, firstName: true, lastName: true } },
+          _count: { select: { replies: true } },
+        },
+      });
+
+      return reply.status(200).send(
+        serializePost({
+          ...updated,
+          category: updated.category as string,
+          replyCount: updated._count.replies,
+        })
+      );
+    }
+  );
+
+  // ─── DELETE /posts/:id ────────────────────────────────────────────────────
+
+  app.delete<{ Params: PostParamsOnly }>(
+    "/posts/:id",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Posts"],
+        summary: "Delete a post (only allowed when it has no replies)",
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string" } },
+        },
+        response: {
+          204: { type: "null" },
+          401: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          403: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          404: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          409: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const userId = request.user.userId;
+
+      const post = await prisma.post.findUnique({
+        where: { id },
+        select: { id: true, authorId: true, _count: { select: { replies: true } } },
+      });
+      if (!post) return reply.status(404).send({ message: "Post not found" });
+      if (post.authorId !== userId) return reply.status(403).send({ message: "Forbidden" });
+      if (post._count.replies > 0) return reply.status(409).send({ message: "Cannot delete a post that has replies" });
+
+      await prisma.post.delete({ where: { id } });
+      return reply.status(204).send();
     }
   );
 
