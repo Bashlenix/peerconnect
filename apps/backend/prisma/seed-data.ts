@@ -11,6 +11,7 @@ export const UNIVERSITIES = [
   { name: "University of Cologne", domain: "uni-koeln.de" },
   { name: "University of Frankfurt", domain: "uni-frankfurt.de" },
   { name: "University of Stuttgart", domain: "uni-stuttgart.de" },
+  { name: "Technische Hochschule Deggendorf", domain: "stud.th-deg.de" },
 ];
 
 export const BADGES = [
