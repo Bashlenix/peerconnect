@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-dev": "tsx prisma/seed-dev.ts",
-    "db:seed-ads": "tsx prisma/seed-ads.ts"
+    "db:seed-ads": "tsx prisma/seed-ads.ts",
+    "db:seed-extended": "tsx prisma/seed-extended.ts"
   },
   "prisma": {
     "seed": "npm run db:seed"
