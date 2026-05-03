@@ -1,32 +1,37 @@
-feat: Issue 17 — GET /api/ads backend endpoint
+feat: Issue 18 — AdCard component & feed injection
 
 Key decisions:
-- adsRoute registered under GET /ads with onRequest: [app.authenticate]; returns
-  401 via the standard authenticate decorator if no valid JWT cookie is present
-- Premium check: fetches user's subscription.status from DB; returns { ads: [] }
-  immediately for 'premium' users — no ad query executed (early-return pattern)
-- Active-ad filter uses Prisma findMany with AND [ OR[startsAt null / lte now],
-  OR[endsAt null / gte now] ] plus isActive:true — handles all four null/date
-  combinations correctly without raw SQL
-- Fisher-Yates shuffle applied in-process after the DB fetch; random order per
-  request as required by issue spec
-- Response select: only id, title, body, imageUrl, linkUrl, advertiserName —
-  no internal fields (isActive, startsAt, endsAt, createdAt, updatedAt) exposed
-- Swagger schema added with Tags: ["Ads"], 200 + 401 response shapes documented
-- Subscription is auto-created as 'free' on registration (auth.ts line 101), so
-  the premium test uses prisma.subscription.update (not create) to upgrade status
+- api/ads.ts: thin fetch wrapper for GET /api/ads using the same
+  credentials:include pattern as other API modules; typed Ad interface
+  matches the backend select (id, title, body, imageUrl, linkUrl,
+  advertiserName)
+- AdCard component: amber border/background to be visually distinct from
+  PostCard; "Sponsored" label + advertiserName in header; image rendered
+  only when imageUrl is non-null (card layout unchanged when absent);
+  entire card is an <a> with target="_blank" rel="noopener noreferrer"
+- FeedPage: adsQueryResult is declared alongside feedQueryResult and
+  searchQueryResult — all three useQuery calls are issued concurrently
+  (React Query batches them in a single render, no waterfall)
+- ads array is set to [] during active search so no slots are injected
+  in search results; premium users get [] from the backend so the same
+  code path suppresses ads transparently
+- Injection logic: Fisher-Yates-shuffled order returned by API is
+  preserved as-is; ads cycle via adSlot % ads.length when slots exceed
+  ad count; no ad injected if posts.length < 5
+- staleTime of 5 min on the ads query avoids re-fetching on every
+  re-render while keeping ad rotation fresh
 
 Files changed:
-- apps/backend/src/routes/ads.ts  (new — adsRoute with GET /ads)
-- apps/backend/src/app.ts  (import + register adsRoute)
-- apps/backend/tests/ads.test.ts  (new — 10 tests covering auth, premium, free,
-  inactive/expired/future ads, null bounds, imageUrl, response shape)
-- .ai/issues/done/17-ads-api-endpoint.md  (moved to done)
+- apps/frontend/src/api/ads.ts  (new — getAds() + Ad type)
+- apps/frontend/src/components/AdCard.tsx  (new — AdCard component)
+- apps/frontend/src/pages/FeedPage.tsx  (added adsQueryResult, ad
+  injection loop, imports)
+- .ai/issues/done/18-ad-card-feed-injection.md  (moved to done)
 
 Blockers / notes for next iteration:
-- 17 pre-existing test failures in auth/notifications/posts tests remain
-  (non-university domain, ordering pollution, requiresManualReview) — not caused
-  by this issue
-- Issue 18 (AdCard + feed injection) is now unblocked
+- 16 pre-existing test failures in auth/notifications remain — not
+  caused by this issue
+- No frontend test runner is configured; typecheck passes clean
+- Ad click tracking / impression events not in scope for this issue
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
