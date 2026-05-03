@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter, Search, X } from "lucide-react";
 import { logout } from "@/api/auth";
 import { getPosts, searchPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
+import { getAds, type Ad } from "@/api/ads";
 import { useAuthStore } from "@/store/auth";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AdCard } from "@/components/AdCard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -384,7 +386,15 @@ export default function FeedPage() {
     enabled: searchActive,
   });
 
+  const adsQueryResult = useQuery({
+    queryKey: ["ads"],
+    queryFn: getAds,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data, isLoading, isError, error } = searchActive ? searchQueryResult : feedQueryResult;
+
+  const ads: Ad[] = (!searchActive && adsQueryResult.data?.ads) ? adsQueryResult.data.ads : [];
 
   function invalidateFeed() {
     queryClient.invalidateQueries({ queryKey: ["posts"] });
@@ -482,14 +492,30 @@ export default function FeedPage() {
           </p>
         )}
 
-        {data && data.posts.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            currentUserId={user?.id}
-            onUpdated={invalidateFeed}
-          />
-        ))}
+        {data && (() => {
+          const posts = data.posts;
+          const shouldInjectAds = ads.length > 0 && posts.length >= 5;
+          const items: React.ReactNode[] = [];
+          let adSlot = 0;
+
+          posts.forEach((post, i) => {
+            items.push(
+              <PostCard
+                key={post.id}
+                post={post}
+                currentUserId={user?.id}
+                onUpdated={invalidateFeed}
+              />
+            );
+            if (shouldInjectAds && (i + 1) % 5 === 0) {
+              const ad = ads[adSlot % ads.length]!;
+              items.push(<AdCard key={`ad-${adSlot}-${ad.id}`} ad={ad} />);
+              adSlot++;
+            }
+          });
+
+          return items;
+        })()}
       </main>
     </div>
   );
