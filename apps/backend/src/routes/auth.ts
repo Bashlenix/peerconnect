@@ -66,6 +66,11 @@ export async function authRoute(app: FastifyInstance) {
             properties: { message: { type: "string" } },
             required: ["message"],
           },
+          422: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
         },
       },
     },
@@ -82,17 +87,20 @@ export async function authRoute(app: FastifyInstance) {
       }
 
       const domainResult = await validateEmailDomain(normalised);
+      if (!domainResult.valid) {
+        return reply.status(422).send({ message: "Only university email addresses are allowed." });
+      }
+
       const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
       const user = await prisma.user.create({
         data: {
           email: normalised,
           passwordHash,
-          universityId: domainResult.valid ? domainResult.university.id : null,
-          requiresManualReview: !domainResult.valid,
+          universityId: domainResult.university.id,
           subscription: { create: {} },
         },
-        select: { id: true, requiresManualReview: true },
+        select: { id: true },
       });
 
       const token = generateToken();
@@ -101,7 +109,7 @@ export async function authRoute(app: FastifyInstance) {
 
       return reply.status(201).send({
         message: "Registration successful. Please verify your email.",
-        requiresManualReview: user.requiresManualReview,
+        requiresManualReview: false,
       });
     }
   );
