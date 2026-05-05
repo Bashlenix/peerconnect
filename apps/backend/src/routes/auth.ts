@@ -57,9 +57,8 @@ export async function authRoute(app: FastifyInstance) {
             type: "object",
             properties: {
               message: { type: "string" },
-              requiresManualReview: { type: "boolean" },
             },
-            required: ["message", "requiresManualReview"],
+            required: ["message"],
           },
           409: {
             type: "object",
@@ -109,7 +108,6 @@ export async function authRoute(app: FastifyInstance) {
 
       return reply.status(201).send({
         message: "Registration successful. Please verify your email.",
-        requiresManualReview: false,
       });
     }
   );

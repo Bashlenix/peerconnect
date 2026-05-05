@@ -2,7 +2,6 @@ const BASE = "/api";
 
 export interface RegisterResponse {
   message: string;
-  requiresManualReview: boolean;
 }
 
 export interface VerifyEmailResponse {

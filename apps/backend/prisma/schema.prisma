@@ -57,7 +57,6 @@ model User {
   semester                Int?
   languages               String[]
   isVerified              Boolean   @default(false)
-  requiresManualReview    Boolean   @default(false)
   emailVerificationToken  String?
   emailVerificationExpiry DateTime?
   refreshTokenHash        String?   @unique

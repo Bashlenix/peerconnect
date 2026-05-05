@@ -83,7 +83,6 @@ describe("users table", () => {
     });
     expect(user.id).toBeTruthy();
     expect(user.isVerified).toBe(false);
-    expect(user.requiresManualReview).toBe(false);
     await prisma.user.delete({ where: { id: user.id } });
   });
 

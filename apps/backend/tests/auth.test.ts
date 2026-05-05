@@ -63,7 +63,6 @@ describe("POST /auth/register", () => {
     expect(res.statusCode).toBe(201);
     expect(res.json()).toMatchObject({
       message: expect.stringContaining("verify your email"),
-      requiresManualReview: false,
     });
 
     const user = await prisma.user.findUnique({
@@ -71,7 +70,6 @@ describe("POST /auth/register", () => {
     });
     expect(user).not.toBeNull();
     expect(user!.isVerified).toBe(false);
-    expect(user!.requiresManualReview).toBe(false);
     expect(user!.universityId).not.toBeNull();
     expect(user!.emailVerificationToken).not.toBeNull();
   });
