@@ -95,21 +95,20 @@ describe("POST /auth/register", () => {
     expect(subscription!.endDate).toBeNull();
   });
 
-  it("creates a user with requiresManualReview=true for an unknown domain", async () => {
+  it("returns 422 and creates no user for an unknown domain", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/auth/register",
       payload: { email: "bob@unknown-uni.de", password: "securePass1" },
     });
 
-    expect(res.statusCode).toBe(201);
-    expect(res.json()).toMatchObject({ requiresManualReview: true });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({ message: "Only university email addresses are allowed." });
 
     const user = await prisma.user.findUnique({
       where: { email: "bob@unknown-uni.de" },
     });
-    expect(user!.requiresManualReview).toBe(true);
-    expect(user!.universityId).toBeNull();
+    expect(user).toBeNull();
   });
 
   it("returns 409 for a duplicate email", async () => {

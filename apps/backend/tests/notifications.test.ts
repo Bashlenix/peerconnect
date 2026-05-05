@@ -163,7 +163,7 @@ describe("SSEManager", () => {
 
 describe("GET /notifications", () => {
   it("returns empty list and zero unreadCount initially", async () => {
-    const { cookieHeader } = await registerVerifyAndLogin("notif-empty@example.com");
+    const { cookieHeader } = await registerVerifyAndLogin("notif-empty@tu-berlin.de");
     const res = await app.inject({
       method: "GET",
       url: "/notifications",
@@ -174,7 +174,7 @@ describe("GET /notifications", () => {
   });
 
   it("returns notifications sorted newest first", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-list@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-list@tu-berlin.de");
     await prisma.notification.createMany({
       data: [
         { userId, type: "REPLY_TO_POST" },
@@ -193,7 +193,7 @@ describe("GET /notifications", () => {
   });
 
   it("returns correct unreadCount when some are read", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-unread@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-unread@tu-berlin.de");
     await prisma.notification.createMany({
       data: [
         { userId, type: "REPLY_TO_POST", isRead: true },
@@ -210,7 +210,7 @@ describe("GET /notifications", () => {
   });
 
   it("respects limit and offset query params", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-paginate@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-paginate@tu-berlin.de");
     await prisma.notification.createMany({
       data: Array.from({ length: 5 }, () => ({ userId, type: "REPLY_TO_POST" as const })),
     });
@@ -233,7 +233,7 @@ describe("GET /notifications", () => {
 
 describe("PATCH /notifications/:id/read", () => {
   it("marks a notification as read and returns it", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-read@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-read@tu-berlin.de");
     const notif = await prisma.notification.create({
       data: { userId, type: "REPLY_TO_POST" },
     });
@@ -247,7 +247,7 @@ describe("PATCH /notifications/:id/read", () => {
   });
 
   it("returns 404 for unknown notification", async () => {
-    const { cookieHeader } = await registerVerifyAndLogin("notif-404@example.com");
+    const { cookieHeader } = await registerVerifyAndLogin("notif-404@tu-berlin.de");
     const res = await app.inject({
       method: "PATCH",
       url: "/notifications/does-not-exist/read",
@@ -257,8 +257,8 @@ describe("PATCH /notifications/:id/read", () => {
   });
 
   it("returns 403 when notification belongs to another user", async () => {
-    const { cookieHeader } = await registerVerifyAndLogin("notif-403a@example.com");
-    const { userId: otherId } = await registerVerifyAndLogin("notif-403b@example.com");
+    const { cookieHeader } = await registerVerifyAndLogin("notif-403a@tu-berlin.de");
+    const { userId: otherId } = await registerVerifyAndLogin("notif-403b@tu-berlin.de");
     const notif = await prisma.notification.create({
       data: { userId: otherId, type: "REPLY_TO_POST" },
     });
@@ -280,7 +280,7 @@ describe("PATCH /notifications/:id/read", () => {
 
 describe("PATCH /notifications/read-all", () => {
   it("marks all unread notifications as read", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-readall@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-readall@tu-berlin.de");
     await prisma.notification.createMany({
       data: [
         { userId, type: "REPLY_TO_POST", isRead: false },
@@ -300,7 +300,7 @@ describe("PATCH /notifications/read-all", () => {
   });
 
   it("is idempotent when all notifications are already read", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-readall2@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-readall2@tu-berlin.de");
     await prisma.notification.create({ data: { userId, type: "REPLY_TO_POST", isRead: true } });
     const res = await app.inject({
       method: "PATCH",
@@ -311,8 +311,8 @@ describe("PATCH /notifications/read-all", () => {
   });
 
   it("only marks the current user's notifications", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-readall3a@example.com");
-    const { userId: otherId } = await registerVerifyAndLogin("notif-readall3b@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-readall3a@tu-berlin.de");
+    const { userId: otherId } = await registerVerifyAndLogin("notif-readall3b@tu-berlin.de");
     await prisma.notification.createMany({
       data: [
         { userId, type: "REPLY_TO_POST" },
@@ -338,8 +338,8 @@ describe("PATCH /notifications/read-all", () => {
 
 describe("Notification creation on events", () => {
   it("creates NEW_POST_IN_CATEGORY notification for subscribed users when a post is created", async () => {
-    const { cookieHeader: authorCookie } = await registerVerifyAndLogin("notif-author@example.com");
-    const { userId: subUserId } = await registerVerifyAndLogin("notif-subscriber@example.com");
+    const { cookieHeader: authorCookie } = await registerVerifyAndLogin("notif-author@tu-berlin.de");
+    const { userId: subUserId } = await registerVerifyAndLogin("notif-subscriber@tu-berlin.de");
 
     // Subscribe the second user to Academic
     await prisma.notificationPreference.create({
@@ -363,7 +363,7 @@ describe("Notification creation on events", () => {
   });
 
   it("does not notify the author about their own post", async () => {
-    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-self@example.com");
+    const { cookieHeader, userId } = await registerVerifyAndLogin("notif-self@tu-berlin.de");
 
     await prisma.notificationPreference.create({
       data: { userId, category: "Social" },
@@ -386,9 +386,9 @@ describe("Notification creation on events", () => {
 
   it("creates REPLY_TO_POST notification for the post author when someone replies", async () => {
     const { cookieHeader: authorCookie, userId: authorId } =
-      await registerVerifyAndLogin("notif-postauthor@example.com");
+      await registerVerifyAndLogin("notif-postauthor@tu-berlin.de");
     const { cookieHeader: replierCookie } =
-      await registerVerifyAndLogin("notif-replier@example.com");
+      await registerVerifyAndLogin("notif-replier@tu-berlin.de");
 
     const postRes = await app.inject({
       method: "POST",
@@ -415,9 +415,9 @@ describe("Notification creation on events", () => {
 
   it("creates REPLY_UPVOTED notification for the reply author", async () => {
     const { cookieHeader: authorCookie, userId: authorId } =
-      await registerVerifyAndLogin("notif-replyauthor@example.com");
+      await registerVerifyAndLogin("notif-replyauthor@tu-berlin.de");
     const { cookieHeader: voterCookie } =
-      await registerVerifyAndLogin("notif-voter@example.com");
+      await registerVerifyAndLogin("notif-voter@tu-berlin.de");
 
     const postRes = await app.inject({
       method: "POST",
@@ -451,9 +451,9 @@ describe("Notification creation on events", () => {
 
   it("creates REPLY_MARKED_SOLUTION notification for the reply author", async () => {
     const { cookieHeader: authorCookie, userId: authorId } =
-      await registerVerifyAndLogin("notif-solauthor@example.com");
+      await registerVerifyAndLogin("notif-solauthor@tu-berlin.de");
     const { cookieHeader: replierCookie, userId: replierId } =
-      await registerVerifyAndLogin("notif-solreplier@example.com");
+      await registerVerifyAndLogin("notif-solreplier@tu-berlin.de");
 
     const postRes = await app.inject({
       method: "POST",
