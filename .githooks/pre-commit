@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+# Blocks commits that include Prisma migration files containing spurious
+# search_vector SQL. Prisma generates this incorrectly for the Unsupported
+# tsvector column — strip it manually before committing.
+
+STAGED_MIGRATIONS=$(git diff --cached --name-only | grep 'prisma/migrations/.*\.sql$')
+
+if [ -z "$STAGED_MIGRATIONS" ]; then
+  exit 0
+fi
+
+FOUND=0
+for FILE in $STAGED_MIGRATIONS; do
+  if git show ":$FILE" | grep -q "search_vector"; then
+    echo "ERROR: staged migration contains 'search_vector' reference: $FILE"
+    FOUND=1
+  fi
+done
+
+if [ "$FOUND" -eq 1 ]; then
+  echo ""
+  echo "Prisma generates spurious SQL for the search_vector tsvector column."
+  echo "Remove any lines referencing search_vector from the migration file(s)"
+  echo "above, then re-stage and commit."
+  echo ""
+  echo "Lines to look for and delete:"
+  echo "  DROP INDEX \"posts_search_vector_idx\";"
+  echo "  ALTER TABLE \"posts\" ALTER COLUMN \"search_vector\" DROP DEFAULT;"
+  exit 1
+fi
+
+exit 0

@@ -71,13 +71,21 @@ git clone https://github.com/Mhd-Bashi/PeerConnect.git
 cd PeerConnect
 ```
 
-### 2. Install dependencies
+### 2. Activate git hooks
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This enables the pre-commit hook that guards against a known Prisma code-generation issue (see `CLAUDE.md` for details).
+
+### 3. Install dependencies
 
 ```bash
 npm ci
 ```
 
-### 3. Start the database
+### 4. Start the database
 
 #### Option A: Docker (recommended)
 
@@ -120,7 +128,7 @@ npm run db:seed-extended
 
 > The seed scripts must be run in that exact order. Skipping or reordering them will break foreign-key constraints.
 
-### 4. Configure environment variables
+### 5. Configure environment variables
 
 ```bash
 cp apps/backend/.env.example apps/backend/.env
@@ -138,7 +146,7 @@ Open `apps/backend/.env` and set the following. All other fields can be left as-
 
 The frontend has no environment variables; it proxies all API calls through Vite's dev server to the backend.
 
-### 5. Start the development servers
+### 6. Start the development servers
 
 From the project root, one command starts the backend, frontend, and shared package watcher concurrently:
 
