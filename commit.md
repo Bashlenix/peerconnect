@@ -1,35 +1,32 @@
-chore: pin deps via .npmrc and add seeded Postgres 16 Docker image
+docs: add comprehensive README.md
 
-Key decisions:
-- .npmrc sets save-exact=true so future npm installs write exact versions
-  instead of semver ranges; existing package-lock.json already pins the full
-  tree and npm ci is the correct install command for reproducible builds
-- Multi-stage Dockerfile (docker/db/Dockerfile): stage 1 uses node:22-alpine
-  + postgresql16 (apk); starts a local Postgres instance, runs prisma migrate
-  deploy then all 4 seed scripts in order (seed → seed-dev → seed-ads →
-  seed-extended), and dumps the result with pg_dump
-- Final image is postgres:16-alpine only — no Node.js runtime in the output
-  layer; dump is placed in /docker-entrypoint-initdb.d/ and auto-restored on
-  first container start
-- Credentials baked into the final image: POSTGRES_USER/PASSWORD=postgres,
-  POSTGRES_DB=peerconnect; DATABASE_URL for users of the image is
-  postgresql://postgres:postgres@localhost:5432/peerconnect
-- Trust auth used during the build stage (initdb --auth=trust) so no password
-  is needed when the Node process connects to seed the database
-- Postgres server binary location is resolved dynamically via
-  `find /usr -name initdb -type f | head -1` so the Dockerfile works across
-  Alpine versions regardless of where the package places the binaries
+Covers everything a new team member needs to get started and contribute:
+
+- Project description and tech stack (backend: Fastify/Prisma/PostgreSQL,
+  frontend: React/Vite/TanStack Query/Zustand/Tailwind)
+- Full setup guide from clone to running dev servers, with Docker as the
+  primary database path and a manual PostgreSQL fallback
+- All 13 test accounts with email, password, tier, university, and
+  study programme
+- Feature descriptions with expected behaviour for: auth, feed, search,
+  posts, replies, solutions, notifications, notification preferences,
+  profiles, badges, subscription tiers, and ads
+- Manual test scenarios checklist covering every feature
+- Short mention of the /docs Swagger UI for API exploration
+- Codebase orientation section: directory map + explanation of the
+  backend module/route/test pattern
+- Known limitations: premium tier is data-only, SSE is single-process,
+  no admin UI for manual review, text-only posts, English search only
+- Prominent contributor notice restricting new contributors to
+  front-end work only (to be removed when backend is opened up)
+
+Notes for later:
+- SMTP / email-verification bypass not yet documented (pre-seeded
+  accounts are the local dev workaround for now)
+- Contributor notice (frontend-only restriction) should be removed
+  once backend work is opened to the wider team
 
 Files changed:
-- .npmrc  (new — save-exact=true)
-- docker/db/Dockerfile  (new — multi-stage seeded Postgres 16 image)
-- .ai/issues/19-npmrc-exact-deps.md  (new — local issue mirror)
-- .ai/issues/20-docker-seeded-db.md  (new — local issue mirror)
-
-Blockers / notes for next iteration:
-- Build: docker build -f docker/db/Dockerfile -t peerconnect-db .
-- Run:   docker run -p 5432:5432 peerconnect-db
-- If `find /usr -name initdb` returns multiple hits in a future Alpine
-  version, the `head -1` pick may need to be made more specific
+- README.md  (new)
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
