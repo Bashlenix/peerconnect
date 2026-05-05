@@ -426,7 +426,7 @@ To add a new feature: create a route file in `src/routes/`, register it in `app.
 
 - **Premium tier is data-only.** The subscription status is stored in the database and controls ad visibility, but there is no upgrade flow, payment processing, or paywall in the UI. Use the pre-seeded premium accounts to test the premium experience.
 - **SSE notifications are single-process only.** The SSE manager holds open connections in memory. This works correctly for local development but would not work across multiple server instances in production (would require a Redis pub/sub layer).
-- **No admin workflow for unrecognised domains.** Users who register with an email domain not in the university list are flagged as `requiresManualReview = true` in the database, but there is no admin UI to approve or reject them.
+- **Registration is restricted to known university domains.** Any email address whose domain is not in the seeded university list is rejected outright at registration with a 422 error. Adding a new university requires updating the seed data and rerunning migrations — there is no admin UI for this.
 - **Text only.** Posts and replies are plain text. File and image uploads are not supported.
 - **No direct messaging.** All communication is public within posts.
 - **English full-text search only.** PostgreSQL stemming is configured for English regardless of the post's actual language. German or mixed-language posts may return incomplete results.
