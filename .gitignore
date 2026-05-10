@@ -161,3 +161,8 @@ npm-debug.log*
 # TypeScript build output
 dist/
 *.tsbuildinfo
+
+
+# BUT allow frontend lib again
+!apps/frontend/src/lib/
+!apps/frontend/src/lib/**
