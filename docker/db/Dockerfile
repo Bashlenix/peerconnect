@@ -33,7 +33,7 @@ COPY apps/backend/prisma.config.ts ./apps/backend/
 COPY apps/backend/tsconfig.json    ./apps/backend/
 
 # Generate Prisma client — creates apps/backend/src/generated/ at build time.
-RUN cd /app/apps/backend && npx prisma generate
+RUN cd apps/backend && npx prisma generate
 
 # Trust auth is set in pg_hba.conf so no password is required here.
 ENV DATABASE_URL="postgresql://postgres@localhost:5432/peerconnect"

@@ -1,0 +1,9 @@
+{
+  "name": "PeerConnect",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "npm ci && cd apps/backend && npx prisma generate",
+  "forwardPorts": [3000, 3001, 5432]
+}
