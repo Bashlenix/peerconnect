@@ -8,7 +8,8 @@ interface AskBody {
 }
 
 // In-memory rate limit: max 10 requests per user per 60 seconds
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+// Exported so integration tests can reset state between cases.
+export const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 10;
 const WINDOW_MS = 60_000;
 
