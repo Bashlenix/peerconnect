@@ -196,6 +196,36 @@ describe("POST /ai/ask", () => {
     expect(body.sources[0]).toHaveProperty("author");
   });
 
+  // ── OR fallback for conversational / mixed-language queries ─────────────────
+
+  it("finds posts via OR fallback when conversational opener prevents AND match", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-orfallback@tu-berlin.de");
+
+    await prisma.post.create({
+      data: {
+        content: "python course beginner tutorial resources",
+        category: "Academic",
+        authorId: userId,
+      },
+    });
+
+    // "ti bi" are short (filtered) and "znayet" is non-English noise — only
+    // "python", "course", "znayet" pass the length filter.
+    // The AND query ('python' & 'cours' & 'znayet') won't match.
+    // The OR fallback ('python' OR 'course' OR 'znayet') must find the post.
+    const res = await app.inject({
+      method: "POST",
+      url: "/ai/ask",
+      headers: { cookie: cookieHeader },
+      payload: { query: "ti bi python course znayet" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { answer: string | null; sources: unknown[]; confidence: string };
+    expect(body.confidence).not.toBe("none");
+    expect(body.sources.length).toBeGreaterThan(0);
+  });
+
   // ── Rate limiting ───────────────────────────────────────────────────────────
 
   it("returns 429 on the 11th request within the same rate-limit window", async () => {

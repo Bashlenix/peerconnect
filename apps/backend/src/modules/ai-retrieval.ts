@@ -36,13 +36,14 @@ async function queryPosts(prisma: PrismaClient, tsQuery: string, limit: number):
 // Build a fallback OR query from the significant words in the input.
 // Conversational openers ("hey", "any idea about") add noise terms that
 // the AND query requires — the OR fallback finds posts matching ANY topic word.
+// websearch_to_tsquery uses the keyword OR (not |) for disjunction.
 function buildOrQuery(query: string): string {
   return query
     .trim()
     .split(/\s+/)
     .filter((w) => w.length > 3)
     .slice(-8)          // focus on the tail — that's usually the actual topic
-    .join(" | ");
+    .join(" OR ");
 }
 
 export async function retrieveRelevantPosts(
