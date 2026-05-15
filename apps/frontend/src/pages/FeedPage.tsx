@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter, Search, X } from "lucide-react";
 import { logout } from "@/api/auth";
@@ -448,6 +448,9 @@ export default function FeedPage() {
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          <Link to="/ask" className="text-sm text-blue-600 hover:underline shrink-0">
+            Ask AI
+          </Link>
           <span className="text-sm text-gray-600">{user?.email}</span>
           <NotificationBell />
           <Button
