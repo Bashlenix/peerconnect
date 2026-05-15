@@ -1,6 +1,30 @@
 # PeerConnect
 
-PeerConnect is a community Q&A platform for university students in Germany. Students post questions and share knowledge across four categories — Academic, Social, Sport, and Daily Life Support — with a focus on helping students navigate campus and city life. Features include a real-time notification feed, full-text search, a badge/reputation system, and a subscription tier that removes ads.
+## The Problem
+
+Every year, thousands of students — especially international students — arrive at German universities and face the same questions that thousands of students before them already solved: which Krankenkasse to pick, how to navigate the Ausländerbehörde, which professor's exam is actually hard, how to find housing fast. That knowledge exists, but it lives in WhatsApp group history that scrolls away, in Discord servers that go quiet, and in the heads of students who graduate and take it with them. Every new cohort starts from zero.
+
+Existing platforms don't fix this. Reddit and Discord are anonymous, unstructured, and not university-specific. WhatsApp is ephemeral — knowledge buried in days, gone in months. Generic AI like ChatGPT gives plausible-sounding answers with no grounding in real German student experience.
+
+## The Solution
+
+PeerConnect is a verified peer knowledge platform built specifically for international and first-semester students at German universities. Students post questions across four categories — Academic, Social, Sport, and Daily Life Support — and answers accumulate permanently, ranked by community votes, with the best answer pinned as the accepted solution.
+
+Every account is verified via university email, so every answer carries real context: who said it, where they study, how far along they are. Knowledge doesn't disappear when a student graduates — it stays searchable and citable for every cohort that follows.
+
+**The AI layer makes accumulated knowledge instantly accessible.** While typing a new post, the platform silently searches existing answers and surfaces relevant ones inline — before you post. On the dedicated Ask AI page, students can query the entire peer knowledge base and receive a synthesised answer citing real source posts. The AI is deliberately constrained: it never answers from outside knowledge, only from verified peer posts. If no answer exists yet, it says so and prompts the student to be the first — growing the base for everyone who comes after.
+
+Every new post makes the AI more useful. Every answer the AI surfaces reduces duplicate questions. The platform compounds in value over time in a way no chat group or generic AI can replicate.
+
+## Key Features
+
+- **Verified identity** — University email domain required at registration; answers carry university, programme, and semester context
+- **Accepted solutions** — Post authors pin the best answer; it rises permanently above the noise
+- **AI Ask Bot** — RAG-based assistant (GPT-4.1 nano) that answers only from verified peer posts, with cited sources; surfaces inline while drafting a post and on a dedicated `/ask` page
+- **Real-time notifications** — Server-Sent Events deliver replies, upvotes, and solution alerts instantly
+- **Full-text search** — PostgreSQL tsvector search with relevance ranking across all posts
+- **Badge & reputation system** — Activity-based badges reward consistent contributors
+- **Subscription tier** — Premium accounts remove ads
 
 ---
 
