@@ -141,6 +141,7 @@ Open `apps/backend/.env` and set the following. All other fields can be left as-
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/peerconnect` (Docker) or your local connection string |
 | `JWT_SECRET` | Any random string of 32+ characters. Generate one with: `openssl rand -base64 32` |
 | `FRONTEND_URL` | `http://localhost:5173` |
+| `OPENAI_API_KEY` | Your OpenAI API key — required for the AI Ask Bot feature. The app runs without it, but `/ai/ask` will return 500. |
 
 > The `SMTP_*` variables are required for new user registration but are **not needed** for local development — use the pre-seeded test accounts listed below instead.
 
@@ -268,6 +269,13 @@ Each badge is awarded once and never re-awarded.
 - **Premium** — Identical access; ads are hidden entirely.
 - The subscription model is data-only. No upgrade flow exists in the UI — use the pre-seeded accounts to test each tier.
 
+### AI Ask Bot
+- **Pre-post suggestions** — While typing a new post, the form queries existing posts after 800 ms of inactivity (minimum 20 characters). If relevant answers are found, a suggestion panel appears below the textarea with a synthesised answer and links to the original posts. The post can still be submitted regardless.
+- **Standalone /ask page** — Accessible via the "Ask AI" link in the header. Students can ask a question directly and receive an answer citing source posts. A "No answers found" state links back to the feed when the knowledge base has no relevant content.
+- **Confidence levels** — `high` (3+ matching posts found), `low` (1–2 posts found), `none` (no matches — panel is hidden in the form, empty state shown on the /ask page).
+- **Rate limit** — 10 requests per user per minute. Exceeding the limit returns a brief error; the form remains usable.
+- **Requires `OPENAI_API_KEY`** — The feature is disabled (500 error) if the env var is not set. All other app features continue to work normally.
+
 ---
 
 ## Manual Test Scenarios
@@ -347,6 +355,25 @@ Open two browser windows (or use an incognito window):
 - [ ] Log in as any free-tier account — confirm ads appear in the feed between posts.
 - [ ] Log in as `premium@tu-berlin.de` or `carol@lmu.de` — confirm the feed contains no ads at all.
 
+### 13. AI Ask Bot
+
+> Requires `OPENAI_API_KEY` to be set in `apps/backend/.env`.
+
+**Pre-post suggestion panel**
+- [ ] Log in and open the feed. Start typing a new post with fewer than 20 characters — confirm no suggestion panel appears.
+- [ ] Continue typing until the post reaches 20+ characters and pause for ~1 second — confirm the "Checking previous answers…" spinner appears, then a suggestion panel (or nothing if no matches).
+- [ ] Type a question on a topic that exists in the seeded posts (e.g. `"linear algebra exam"`) — confirm the panel shows an answer and at least one source link.
+- [ ] Click a source link — confirm it navigates to the correct post detail page.
+- [ ] Confirm the **Post** button remains enabled throughout — the panel never blocks submission.
+
+**Standalone /ask page**
+- [ ] Click the **Ask AI** link in the header — confirm it navigates to `/ask`.
+- [ ] Submit a question that matches seeded content — confirm an answer and source links are shown.
+- [ ] Click a source link — confirm it navigates to the correct post detail page.
+- [ ] Submit a question on a topic with no matching posts — confirm the empty state appears with a "Go to feed" link.
+- [ ] Click the "← Back to feed" link — confirm it returns to the feed.
+- [ ] Log out and attempt to navigate to `/ask` directly — confirm you are redirected to the login page.
+
 ---
 
 ## API Documentation
@@ -378,6 +405,8 @@ PeerConnect/
 │   │   │   ├── db.ts                # Prisma client singleton
 │   │   │   ├── routes/              # One file per resource (auth, posts, replies, users, notifications, ads)
 │   │   │   ├── modules/             # Domain logic extracted from routes
+│   │   │   │   ├── ai-retrieval.ts        # FTS retrieval for AI Ask Bot (top-N posts + accepted solutions)
+│   │   │   │   ├── ai-answer.ts           # GPT-4.1-nano synthesis — strict source-only prompt
 │   │   │   │   ├── badge-engine.ts        # Badge award logic (atomic, threshold-based)
 │   │   │   │   ├── domain-validator.ts    # University email domain checks
 │   │   │   │   ├── email-verification-service.ts
@@ -393,6 +422,7 @@ PeerConnect/
 │       └── src/
 │           ├── pages/               # Route-level components (one per page)
 │           │   ├── FeedPage.tsx
+│           │   ├── AskPage.tsx          # AI Ask Bot — standalone /ask page
 │           │   ├── PostDetailPage.tsx
 │           │   ├── ProfilePage.tsx
 │           │   ├── UserProfilePage.tsx
@@ -406,6 +436,7 @@ PeerConnect/
 │           │   ├── NotificationBell.tsx
 │           │   └── ProtectedRoute.tsx
 │           ├── api/                 # Fetch wrappers, one file per backend resource
+│           │   ├── ai.ts            # askAI() — POST /ai/ask fetch wrapper
 │           ├── hooks/               # React Query hooks + auth initialisation
 │           ├── store/               # Zustand store (auth/user state)
 │           └── lib/                 # Shared utilities (cn, etc.)
