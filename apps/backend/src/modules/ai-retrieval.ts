@@ -17,12 +17,8 @@ interface RawRow {
   authorLastName: string | null;
 }
 
-export async function retrieveRelevantPosts(
-  prisma: PrismaClient,
-  query: string,
-  limit = 5
-): Promise<RetrievedPost[]> {
-  const rows = await prisma.$queryRaw<RawRow[]>`
+async function queryPosts(prisma: PrismaClient, tsQuery: string, limit: number): Promise<RawRow[]> {
+  return prisma.$queryRaw<RawRow[]>`
     SELECT
       p.id,
       p.content,
@@ -31,10 +27,38 @@ export async function retrieveRelevantPosts(
       u."lastName"  AS "authorLastName"
     FROM posts p
     JOIN users u ON u.id = p."authorId"
-    WHERE p.search_vector @@ websearch_to_tsquery('english', ${query})
-    ORDER BY ts_rank(p.search_vector, websearch_to_tsquery('english', ${query})) DESC
+    WHERE p.search_vector @@ websearch_to_tsquery('english', ${tsQuery})
+    ORDER BY ts_rank(p.search_vector, websearch_to_tsquery('english', ${tsQuery})) DESC
     LIMIT ${Prisma.raw(String(limit))}
   `;
+}
+
+// Build a fallback OR query from the significant words in the input.
+// Conversational openers ("hey", "any idea about") add noise terms that
+// the AND query requires — the OR fallback finds posts matching ANY topic word.
+function buildOrQuery(query: string): string {
+  return query
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(-8)          // focus on the tail — that's usually the actual topic
+    .join(" | ");
+}
+
+export async function retrieveRelevantPosts(
+  prisma: PrismaClient,
+  query: string,
+  limit = 5
+): Promise<RetrievedPost[]> {
+  // First pass: strict AND — exact for clean keyword queries (e.g. from /ask)
+  let rows = await queryPosts(prisma, query, limit);
+
+  // Second pass: OR fallback — handles conversational input like
+  // "Hey any idea about python course" where AND requires all terms
+  if (rows.length === 0) {
+    const orQuery = buildOrQuery(query);
+    if (orQuery) rows = await queryPosts(prisma, orQuery, limit);
+  }
 
   if (rows.length === 0) return [];
 
