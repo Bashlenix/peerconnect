@@ -8,3 +8,20 @@ export interface ApiResponse<T> {
 export interface HealthResponse {
   status: "ok" | "error";
 }
+
+export interface AiSource {
+  id: string;
+  content: string;
+  category: string;
+  author: { firstName: string | null; lastName: string | null };
+}
+
+export interface AiAskRequest {
+  query: string;
+}
+
+export interface AiAskResponse {
+  answer: string | null;
+  sources: AiSource[];
+  confidence: "high" | "low" | "none";
+}
