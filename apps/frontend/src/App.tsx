@@ -6,6 +6,7 @@ import CheckEmailPage from "./pages/CheckEmailPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import LoginPage from "./pages/LoginPage";
 import FeedPage from "./pages/FeedPage";
+import AskPage from "./pages/AskPage";
 import PostDetailPage from "./pages/PostDetailPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserProfilePage from "./pages/UserProfilePage";
@@ -24,6 +25,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <FeedPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ask"
+        element={
+          <ProtectedRoute>
+            <AskPage />
           </ProtectedRoute>
         }
       />

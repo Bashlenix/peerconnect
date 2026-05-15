@@ -512,6 +512,9 @@ export default function FeedPage() {
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          <Link to="/ask" className="text-sm text-blue-600 hover:underline shrink-0">
+            Ask AI
+          </Link>
           <span className="text-sm text-gray-600">{user?.email}</span>
           <NotificationBell />
           <Button
