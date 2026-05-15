@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter, Search, X } from "lucide-react";
 import { logout } from "@/api/auth";
+import { askAI } from "@/api/ai";
+import type { AiAskResponse } from "@peerconnect/shared";
 import { getPosts, searchPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
 import { getAds, type Ad } from "@/api/ads";
 import { useAuthStore } from "@/store/auth";
@@ -199,12 +201,37 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<PostCategory>("Academic");
   const [isUrgent, setIsUrgent] = useState(false);
+  const [aiResult, setAiResult] = useState<AiAskResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  useEffect(() => {
+    if (content.trim().length < 20) {
+      setAiResult(null);
+      setAiLoading(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setAiLoading(true);
+      try {
+        const result = await askAI(content);
+        setAiResult(result);
+      } catch {
+        // Silently ignore AI errors — never surface them to the user
+      } finally {
+        setAiLoading(false);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [content]);
 
   const mutation = useMutation({
     mutationFn: createPost,
     onSuccess: () => {
       setContent("");
       setIsUrgent(false);
+      setAiResult(null);
       onSuccess();
     },
   });
@@ -226,6 +253,43 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
             rows={3}
             disabled={mutation.isPending}
           />
+          {aiLoading && (
+            <p className="text-xs text-gray-400">
+              <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
+              Checking previous answers…
+            </p>
+          )}
+          {!aiLoading && aiResult && aiResult.confidence !== "none" && (
+            <div className="rounded-md bg-blue-50 border border-blue-100 p-3 text-sm space-y-2">
+              {aiResult.confidence === "high" && (
+                <p className="text-gray-700">{aiResult.answer}</p>
+              )}
+              {aiResult.confidence === "low" && (
+                <p className="text-gray-500 text-xs">
+                  Partial matches found — post if this doesn't help
+                </p>
+              )}
+              {aiResult.sources.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  {aiResult.sources.slice(0, 3).map((source) => {
+                    const name =
+                      source.author.firstName && source.author.lastName
+                        ? `${source.author.firstName} ${source.author.lastName}`
+                        : source.author.firstName ?? "Anonymous";
+                    return (
+                      <Link
+                        key={source.id}
+                        to={"/posts/" + source.id}
+                        className="text-blue-600 hover:underline text-xs"
+                      >
+                        See post by {name} →
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-3 flex-wrap">
             <select
               value={category}
