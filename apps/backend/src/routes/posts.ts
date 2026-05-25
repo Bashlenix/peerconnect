@@ -18,6 +18,7 @@ interface CreatePostBody {
 interface GetPostsQuery {
   limit?: number;
   offset?: number;
+  page?: number;
   category?: string;
   since?: string;
   subscribed?: boolean;
@@ -185,6 +186,7 @@ export async function postsRoute(app: FastifyInstance) {
           properties: {
             limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
             offset: { type: "integer", minimum: 0, default: 0 },
+            page: { type: "integer", minimum: 1, description: "1-based page number (overrides offset when provided)" },
             category: { type: "string", enum: VALID_CATEGORIES },
             since: { type: "string", enum: ["24h", "3d", "7d"] },
             subscribed: { type: "boolean" },
@@ -196,8 +198,9 @@ export async function postsRoute(app: FastifyInstance) {
             type: "object",
             properties: {
               posts: { type: "array", items: postSchema },
+              total: { type: "integer" },
             },
-            required: ["posts"],
+            required: ["posts", "total"],
           },
           401: {
             type: "object",
@@ -208,17 +211,31 @@ export async function postsRoute(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { limit = 20, offset = 0, category, since, subscribed, authorId } = request.query;
-      const posts = await getFeedPosts(prisma, {
-        limit,
-        offset,
-        category: category as PostCategory | undefined,
-        since: since as SinceFilter | undefined,
-        subscribed,
-        userId: request.user.userId,
-        authorId,
-      });
-      return reply.status(200).send({ posts: posts.map(serializePost) });
+      const { limit = 20, offset = 0, page, category, since, subscribed, authorId } = request.query;
+
+      const where: {
+        category?: { in: (typeof VALID_CATEGORIES)[number][] };
+        createdAt?: { gte: Date };
+        authorId?: string;
+      } = {};
+      if (category) where.category = { in: [category as (typeof VALID_CATEGORIES)[number]] };
+      if (authorId) where.authorId = authorId;
+
+      const [posts, total] = await Promise.all([
+        getFeedPosts(prisma, {
+          limit,
+          offset,
+          page,
+          category: category as PostCategory | undefined,
+          since: since as SinceFilter | undefined,
+          subscribed,
+          userId: request.user.userId,
+          authorId,
+        }),
+        prisma.post.count({ where }),
+      ]);
+
+      return reply.status(200).send({ posts: posts.map(serializePost), total });
     }
   );
 

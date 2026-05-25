@@ -5,6 +5,7 @@ export type SinceFilter = "24h" | "3d" | "7d";
 export interface FeedQueryParams {
   limit: number;
   offset: number;
+  page?: number;
   category?: PostCategory;
   since?: SinceFilter;
   subscribed?: boolean;
@@ -73,8 +74,11 @@ export async function getFeedPosts(prisma: PrismaClient, params: FeedQueryParams
     where.authorId = params.authorId;
   }
 
+  const effectiveOffset =
+    params.page != null ? (params.page - 1) * params.limit : params.offset;
+
   const posts = await prisma.post.findMany({
-    skip: params.offset,
+    skip: effectiveOffset,
     take: params.limit,
     where,
     orderBy: { createdAt: "desc" },

@@ -21,6 +21,7 @@ export interface Post {
 
 export interface GetPostsResponse {
   posts: Post[];
+  total: number;
 }
 
 export interface CreatePostInput {
@@ -34,6 +35,7 @@ export type SinceFilter = "24h" | "3d" | "7d";
 export interface GetPostsParams {
   limit?: number;
   offset?: number;
+  page?: number;
   category?: PostCategory;
   since?: SinceFilter;
   subscribed?: boolean;
@@ -44,6 +46,7 @@ export async function getPosts(params?: GetPostsParams): Promise<GetPostsRespons
   const query = new URLSearchParams();
   if (params?.limit != null) query.set("limit", String(params.limit));
   if (params?.offset != null) query.set("offset", String(params.offset));
+  if (params?.page != null) query.set("page", String(params.page));
   if (params?.category) query.set("category", params.category);
   if (params?.since) query.set("since", params.since);
   if (params?.subscribed != null) query.set("subscribed", String(params.subscribed));
