@@ -10,6 +10,13 @@ import AskPage from "./pages/AskPage";
 import PostDetailPage from "./pages/PostDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import UserProfilePage from "./pages/UserProfilePage";
+import { useAuthStore } from "./store/auth";
+
+function ProfileRedirect() {
+  const { user } = useAuthStore();
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={`/users/${user.id}`} replace />;
+}
 
 function AppRoutes() {
   useInitAuth();
@@ -57,6 +64,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <UserProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfileRedirect />
           </ProtectedRoute>
         }
       />
