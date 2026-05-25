@@ -166,3 +166,7 @@ dist/
 # BUT allow frontend lib again
 !apps/frontend/src/lib/
 !apps/frontend/src/lib/**
+# Claude Code internals
+.claude/
+ralph/
+commit.md
