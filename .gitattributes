@@ -1,0 +1,4 @@
+# Ensure shell scripts always use LF line endings regardless of the
+# developer's OS. CRLF endings break the shebang line inside Linux
+# containers and cause "bad interpreter" errors during docker build.
+*.sh text eol=lf
