@@ -9,6 +9,7 @@ export interface FeedQueryParams {
   since?: SinceFilter;
   subscribed?: boolean;
   userId?: string;
+  authorId?: string;
 }
 
 export interface FeedPost {
@@ -57,6 +58,7 @@ export async function getFeedPosts(prisma: PrismaClient, params: FeedQueryParams
   const where: {
     category?: { in: PostCategory[] };
     createdAt?: { gte: Date };
+    authorId?: string;
   } = {};
 
   if (resolvedCategories) {
@@ -65,6 +67,10 @@ export async function getFeedPosts(prisma: PrismaClient, params: FeedQueryParams
 
   if (params.since) {
     where.createdAt = { gte: sinceDate(params.since) };
+  }
+
+  if (params.authorId) {
+    where.authorId = params.authorId;
   }
 
   const posts = await prisma.post.findMany({

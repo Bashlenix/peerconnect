@@ -21,6 +21,7 @@ interface GetPostsQuery {
   category?: string;
   since?: string;
   subscribed?: boolean;
+  authorId?: string;
 }
 
 interface SearchPostsQuery {
@@ -187,6 +188,7 @@ export async function postsRoute(app: FastifyInstance) {
             category: { type: "string", enum: VALID_CATEGORIES },
             since: { type: "string", enum: ["24h", "3d", "7d"] },
             subscribed: { type: "boolean" },
+            authorId: { type: "string", description: "Filter posts by author UUID" },
           },
         },
         response: {
@@ -206,7 +208,7 @@ export async function postsRoute(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { limit = 20, offset = 0, category, since, subscribed } = request.query;
+      const { limit = 20, offset = 0, category, since, subscribed, authorId } = request.query;
       const posts = await getFeedPosts(prisma, {
         limit,
         offset,
@@ -214,6 +216,7 @@ export async function postsRoute(app: FastifyInstance) {
         since: since as SinceFilter | undefined,
         subscribed,
         userId: request.user.userId,
+        authorId,
       });
       return reply.status(200).send({ posts: posts.map(serializePost) });
     }

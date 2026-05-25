@@ -37,6 +37,7 @@ export interface GetPostsParams {
   category?: PostCategory;
   since?: SinceFilter;
   subscribed?: boolean;
+  authorId?: string;
 }
 
 export async function getPosts(params?: GetPostsParams): Promise<GetPostsResponse> {
@@ -46,6 +47,7 @@ export async function getPosts(params?: GetPostsParams): Promise<GetPostsRespons
   if (params?.category) query.set("category", params.category);
   if (params?.since) query.set("since", params.since);
   if (params?.subscribed != null) query.set("subscribed", String(params.subscribed));
+  if (params?.authorId) query.set("authorId", params.authorId);
 
   const url = `${BASE}/posts${query.size > 0 ? `?${query}` : ""}`;
   const res = await fetch(url, { credentials: "include" });
