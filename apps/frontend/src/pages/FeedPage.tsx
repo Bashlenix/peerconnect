@@ -2,13 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter, Search, X } from "lucide-react";
-import { logout } from "@/api/auth";
 import { askAI } from "@/api/ai";
 import type { AiAskResponse } from "@peerconnect/shared";
 import { getPosts, searchPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
 import { getAds, type Ad } from "@/api/ads";
 import { useAuthStore } from "@/store/auth";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AvatarDropdown } from "@/components/AvatarDropdown";
 import { AdCard } from "@/components/AdCard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -413,24 +413,14 @@ function FilterPanel({
 }
 
 export default function FeedPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, clearAuth } = useAuthStore();
+  const { user } = useAuthStore();
 
   const [filters, setFilters] = useState<FeedFilters>({ category: "", since: "", subscribed: false });
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   const searchActive = searchQuery !== "";
-
-  const logoutMutation = useMutation({
-    mutationFn: logout,
-    onSuccess: () => {
-      clearAuth();
-      queryClient.clear();
-      navigate("/login", { replace: true });
-    },
-  });
 
   const feedQueryResult = useQuery({
     queryKey: ["posts", filters],
@@ -515,16 +505,8 @@ export default function FeedPage() {
           <Link to="/ask" className="text-sm text-blue-600 hover:underline shrink-0">
             Ask AI
           </Link>
-          <Link to="/profile" className="text-sm text-gray-600 hover:underline">{user?.email}</Link>
           <NotificationBell />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
-          >
-            {logoutMutation.isPending ? "Signing out…" : "Sign out"}
-          </Button>
+          <AvatarDropdown />
         </div>
       </header>
 
