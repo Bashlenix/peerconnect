@@ -515,7 +515,7 @@ export default function FeedPage() {
           <Link to="/ask" className="text-sm text-blue-600 hover:underline shrink-0">
             Ask AI
           </Link>
-          <Link to="/profile" className="text-sm text-gray-600 hover:underline">{user?.email}</Link>
+          <Link to="/settings" className="text-sm text-gray-600 hover:underline">{user?.email}</Link>
           <NotificationBell />
           <Button
             variant="outline"

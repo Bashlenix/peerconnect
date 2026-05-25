@@ -8,7 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import FeedPage from "./pages/FeedPage";
 import AskPage from "./pages/AskPage";
 import PostDetailPage from "./pages/PostDetailPage";
-import ProfilePage from "./pages/ProfilePage";
+import SettingsPage from "./pages/SettingsPage";
 import UserProfilePage from "./pages/UserProfilePage";
 
 function AppRoutes() {
@@ -45,10 +45,10 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/profile"
+        path="/settings"
         element={
           <ProtectedRoute>
-            <ProfilePage />
+            <SettingsPage />
           </ProtectedRoute>
         }
       />
