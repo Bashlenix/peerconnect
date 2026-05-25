@@ -29,6 +29,7 @@ import {
 } from "@/api/posts";
 import { useAuthStore } from "@/store/auth";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AvatarDropdown } from "@/components/AvatarDropdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -369,8 +370,9 @@ export default function PostDetailPage() {
           Feed
         </Button>
         <h1 className="text-xl font-semibold">Thread</h1>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
           <NotificationBell />
+          <AvatarDropdown />
         </div>
       </header>
 
