@@ -7,6 +7,7 @@ import {
   getPublicProfile,
   getNotificationPreferences,
   updateNotificationPreferences,
+  deleteAccount,
   ALL_CATEGORIES,
   type UpdateProfileInput,
   type PostCategory,
@@ -20,7 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function SettingsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -30,6 +31,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<PostCategory[]>([]);
   const [prefsSaved, setPrefsSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", user?.id],
@@ -75,6 +77,15 @@ export default function SettingsPage() {
       setSelectedCategories(updated.categories);
       setPrefsSaved(true);
       setTimeout(() => setPrefsSaved(false), 2000);
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: () => {
+      clearAuth();
+      queryClient.clear();
+      navigate("/login", { replace: true });
     },
   });
 
@@ -286,6 +297,57 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="mt-12 border-t border-red-200 pt-8">
+          <h2 className="text-lg font-semibold text-red-700 mb-1">Danger zone</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Permanently delete your account. Your posts and replies will remain but will be
+            anonymised.
+          </p>
+
+          {!confirmDelete ? (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleteAccountMutation.isPending}
+            >
+              Delete account
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-3 max-w-sm">
+              <p className="text-sm font-medium text-gray-800">
+                Are you sure? This cannot be undone.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleteAccountMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => deleteAccountMutation.mutate()}
+                  disabled={deleteAccountMutation.isPending}
+                >
+                  {deleteAccountMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Yes, delete my account
+                </Button>
+              </div>
+              {deleteAccountMutation.isError && (
+                <p className="text-sm text-red-600">
+                  {(deleteAccountMutation.error as Error).message}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

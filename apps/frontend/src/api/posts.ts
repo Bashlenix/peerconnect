@@ -15,7 +15,7 @@ export interface Post {
   isUrgent: boolean;
   createdAt: string;
   editedAt: string | null;
-  author: PostAuthor;
+  author: PostAuthor | null;
   replyCount: number;
 }
 
@@ -88,7 +88,7 @@ export interface Reply {
   editedAt: string | null;
   upvoteCount: number;
   hasUpvoted: boolean;
-  author: PostAuthor;
+  author: PostAuthor | null;
 }
 
 export interface GetRepliesResponse {

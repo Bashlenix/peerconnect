@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import type { PostCategory } from "../generated/prisma/client.js";
+import { clearAuthCookies } from "../modules/token-service.js";
 
 const VALID_CATEGORIES: PostCategory[] = ["Academic", "Social", "Sport", "DailyLifeSupport"];
 
@@ -275,6 +276,33 @@ export async function usersRoute(app: FastifyInstance) {
       ]);
 
       return reply.status(200).send({ categories: unique.sort() });
+    }
+  );
+
+  // ─── DELETE /users/me ─────────────────────────────────────────────────────
+
+  app.delete(
+    "/users/me",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Users"],
+        summary: "Permanently delete the authenticated user's account",
+        description:
+          "Deletes the account. Posts and replies authored by the user are anonymised (authorId set to null).",
+        response: {
+          204: { type: "null", description: "Account deleted" },
+          401: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.user.userId;
+
+      await prisma.user.delete({ where: { id: userId } });
+
+      clearAuthCookies(reply);
+      return reply.status(204).send();
     }
   );
 }

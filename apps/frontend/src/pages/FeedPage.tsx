@@ -40,6 +40,7 @@ function formatTimeAgo(isoDate: string): string {
 }
 
 function authorName(author: Post["author"]): string {
+  if (!author) return "Deleted User";
   if (author.firstName && author.lastName) return `${author.firstName} ${author.lastName}`;
   if (author.firstName) return author.firstName;
   return "Anonymous";
@@ -57,7 +58,7 @@ function PostCard({ post, currentUserId, onUpdated }: PostCardProps) {
   const [editContent, setEditContent] = useState(post.content);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const isAuthor = currentUserId === post.author.id;
+  const isAuthor = currentUserId !== undefined && post.author !== null && currentUserId === post.author.id;
 
   const editMutation = useMutation({
     mutationFn: (content: string) => updatePost(post.id, content),
