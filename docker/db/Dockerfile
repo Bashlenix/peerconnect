@@ -38,18 +38,9 @@ RUN cd apps/backend && npx prisma generate
 # Trust auth is set in pg_hba.conf so no password is required here.
 ENV DATABASE_URL="postgresql://postgres@localhost:5432/peerconnect"
 
-RUN PG_BINDIR=$(dirname "$(find /usr -name pg_ctl -type f | head -1)") \
-    && su -s /bin/sh postgres -c \
-        "${PG_BINDIR}/pg_ctl -D /var/lib/postgresql/data start -w -l /tmp/pg.log" \
-    && su -s /bin/sh postgres -c "createdb peerconnect" \
-    && sh -c 'cd /app/apps/backend && npx prisma migrate deploy' \
-    && sh -c 'cd /app/apps/backend && npx tsx prisma/seed.ts' \
-    && sh -c 'cd /app/apps/backend && npx tsx prisma/seed-dev.ts' \
-    && sh -c 'cd /app/apps/backend && npx tsx prisma/seed-ads.ts' \
-    && sh -c 'cd /app/apps/backend && npx tsx prisma/seed-extended.ts' \
-    && ${PG_BINDIR}/pg_dump -U postgres -h localhost peerconnect > /seed.sql \
-    && su -s /bin/sh postgres -c \
-        "${PG_BINDIR}/pg_ctl -D /var/lib/postgresql/data stop -w"
+# Run the seed script: starts pg, migrates, seeds all data, dumps to /seed.sql.
+COPY docker/db/seed.sh /seed.sh
+RUN chmod +x /seed.sh && /seed.sh
 
 # ─── Stage 2: final ──────────────────────────────────────────────────────────
 # Minimal postgres:16-alpine image. The dump is auto-restored on first
