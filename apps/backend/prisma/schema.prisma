@@ -82,14 +82,14 @@ model Post {
   content   String
   category  PostCategory
   isUrgent  Boolean      @default(false)
-  authorId      String
+  authorId      String?
   editedAt      DateTime?
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
   // snake_case intentional: must match the DB-generated column name
   search_vector Unsupported("tsvector")?
 
-  author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author        User?          @relation(fields: [authorId], references: [id], onDelete: SetNull)
   replies       Reply[]
   notifications Notification[]
 
@@ -100,13 +100,13 @@ model Reply {
   id         String    @id @default(cuid())
   content    String
   isSolution Boolean   @default(false)
-  authorId   String
+  authorId   String?
   postId     String
   editedAt   DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author        User?          @relation(fields: [authorId], references: [id], onDelete: SetNull)
   post          Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
   upvotes       Upvote[]
   notifications Notification[]

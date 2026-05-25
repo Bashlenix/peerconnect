@@ -1,32 +1,41 @@
-chore: enforce Prisma search_vector migration guard via CLAUDE.md and pre-commit hook
+feat(#36): account deletion with post/reply anonymisation
 
 Key decisions:
-- Created CLAUDE.md at the repo root with an explicit rule telling Claude
-  to always strip spurious search_vector SQL from generated Prisma
-  migrations before applying or committing. CLAUDE.md is loaded into
-  Claude Code's context at the start of every session, making this a
-  durable instruction rather than a one-off reminder.
-- Created .githooks/pre-commit that scans staged migration SQL files for
-  any reference to "search_vector" and blocks the commit with a clear
-  error message if found. This catches both AI-generated and
-  human-authored migrations.
-- Used a committed .githooks/ directory (not .git/hooks/) so the hook
-  is version-controlled and shared with the whole team. Each developer
-  activates it once with: git config core.hooksPath .githooks
-- Added step 2 to the README Getting Started section with the
-  git config command and a pointer to CLAUDE.md for context.
-  Renumbered subsequent steps 3-5 → 4-6 accordingly.
-- npm run typecheck: 0 errors. npm run test: 210/210 passed.
+- Post.authorId and Reply.authorId changed to String? (nullable) with onDelete: SetNull
+  so posts/replies survive user deletion but are anonymised (authorId set to null).
+- Manually created migration SQL (20260526000000_account_deletion): ALTER TABLE
+  drops NOT NULL constraint and replaces Cascade FK with SET NULL FK for posts + replies.
+- DELETE /users/me endpoint: JWT-authenticated, deletes user via prisma.user.delete,
+  clears auth cookies with clearAuthCookies, returns 204.
+- Frontend: ProfilePage shows "Delete account" button with inline confirm step (no
+  AlertDialog — component not in ui/); on confirm calls deleteAccount(), clearAuth(),
+  redirects to /login.
+- Null-author UI guard: all post/reply cards show "Deleted User" for null authors with
+  no profile link; isAuthor checks guard against null.author before id comparison.
+- Type changes propagated through: PostAuthor (nullable in Post/Reply interfaces),
+  FeedPost, ReplyItem, serializePost, serializeReply, ai-retrieval, badge/notification
+  paths in posts+replies routes — all guarded with null checks before calling
+  checkAndAwardBadges or creating notifications.
+- Search results naturally exclude deleted-author posts (raw SQL INNER JOIN on authorId).
 
 Files changed:
-- CLAUDE.md                  (new — project rules for Claude Code)
-- .githooks/pre-commit       (new — blocks search_vector in migration SQL)
-- README.md                  (step 2 added; steps renumbered)
-- commit.md                  (updated)
+  apps/backend/prisma/schema.prisma
+  apps/backend/prisma/migrations/20260526000000_account_deletion/migration.sql (new)
+  apps/backend/src/routes/users.ts
+  apps/backend/src/routes/posts.ts
+  apps/backend/src/routes/replies.ts
+  apps/backend/src/modules/feed-query.ts
+  apps/backend/src/modules/reply-query.ts
+  apps/backend/src/modules/ai-retrieval.ts
+  apps/frontend/src/api/users.ts
+  apps/frontend/src/api/posts.ts
+  apps/frontend/src/pages/ProfilePage.tsx
+  apps/frontend/src/pages/FeedPage.tsx
+  apps/frontend/src/pages/PostDetailPage.tsx
+  .ai/issues/done/36-account-deletion.md (moved)
 
-Blockers / notes for next iteration:
-- New team members must run `git config core.hooksPath .githooks` after
-  cloning; it cannot be automated without adding a dependency (e.g. husky).
-  The README now documents this as step 2 of Getting Started.
+Notes:
+- Migration SQL must be applied via `prisma migrate deploy` or run manually.
+- typecheck + build pass for both backend and frontend.
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

@@ -54,6 +54,7 @@ const postSchema = {
     editedAt: { type: "string", format: "date-time", nullable: true },
     replyCount: { type: "integer" },
     author: {
+      nullable: true,
       type: "object",
       properties: {
         id: { type: "string" },
@@ -63,7 +64,7 @@ const postSchema = {
       required: ["id"],
     },
   },
-  required: ["id", "content", "category", "isUrgent", "createdAt", "replyCount", "author"],
+  required: ["id", "content", "category", "isUrgent", "createdAt", "replyCount"],
 };
 
 function serializePost(post: {
@@ -73,7 +74,7 @@ function serializePost(post: {
   isUrgent: boolean;
   createdAt: Date;
   editedAt: Date | null;
-  author: { id: string; firstName: string | null; lastName: string | null };
+  author: { id: string; firstName: string | null; lastName: string | null } | null;
   replyCount: number;
 }) {
   return {
@@ -426,25 +427,28 @@ export async function postsRoute(app: FastifyInstance) {
       });
       if (!replyRecord) return reply.status(404).send({ message: "Reply not found" });
 
+      const replyAuthorId = replyRecord.authorId;
+
       const newBadges = await prisma.$transaction(async (tx) => {
         await tx.reply.updateMany({ where: { postId, isSolution: true }, data: { isSolution: false } });
         await tx.reply.update({ where: { id: replyId }, data: { isSolution: true } });
-        return checkAndAwardBadges(tx, replyRecord.authorId, "SOLUTION_MARKED");
+        if (!replyAuthorId) return [];
+        return checkAndAwardBadges(tx, replyAuthorId, "SOLUTION_MARKED");
       });
 
-      // Notify the reply author if they're different from the post author
-      if (replyRecord.authorId !== userId) {
+      // Notify the reply author if they're different from the post author and not deleted
+      if (replyAuthorId && replyAuthorId !== userId) {
         void (async () => {
           const notif = await prisma.notification.create({
             data: {
-              userId: replyRecord.authorId,
+              userId: replyAuthorId,
               type: "REPLY_MARKED_SOLUTION" as NotificationType,
               postId,
               replyId,
             },
             select: { id: true },
           });
-          sseManager.push(replyRecord.authorId, "notification", {
+          sseManager.push(replyAuthorId, "notification", {
             type: "REPLY_MARKED_SOLUTION",
             notificationId: notif.id,
           });
@@ -452,16 +456,17 @@ export async function postsRoute(app: FastifyInstance) {
       }
 
       for (const badge of newBadges) {
+        if (!replyAuthorId) break;
         void (async () => {
           const notif = await prisma.notification.create({
-            data: { userId: replyRecord.authorId, type: "BADGE_AWARDED" as NotificationType },
+            data: { userId: replyAuthorId, type: "BADGE_AWARDED" as NotificationType },
             select: { id: true },
           });
-          sseManager.push(replyRecord.authorId, "notification", {
+          sseManager.push(replyAuthorId, "notification", {
             type: "BADGE_AWARDED",
             notificationId: notif.id,
           });
-          sseManager.push(replyRecord.authorId, "badge_awarded", {
+          sseManager.push(replyAuthorId, "badge_awarded", {
             name: badge.name,
             description: badge.description,
           });

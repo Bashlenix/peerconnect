@@ -103,3 +103,15 @@ export async function updateNotificationPreferences(
 
   return data;
 }
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch(`${BASE}/users/me`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = (await res.json()) as { message?: string };
+    throw new Error(data.message ?? "Failed to delete account");
+  }
+}

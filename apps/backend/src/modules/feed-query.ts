@@ -18,7 +18,7 @@ export interface FeedPost {
   isUrgent: boolean;
   createdAt: Date;
   editedAt: Date | null;
-  author: { id: string; firstName: string | null; lastName: string | null };
+  author: { id: string; firstName: string | null; lastName: string | null } | null;
   replyCount: number;
 }
 

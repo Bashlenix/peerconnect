@@ -86,7 +86,10 @@ export async function retrieveRelevantPosts(
       acceptedSolution: solution
         ? {
             content: solution.content,
-            author: { firstName: solution.author.firstName, lastName: solution.author.lastName },
+            author: {
+              firstName: solution.author?.firstName ?? null,
+              lastName: solution.author?.lastName ?? null,
+            },
           }
         : null,
     };

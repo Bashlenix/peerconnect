@@ -8,7 +8,7 @@ export interface ReplyItem {
   editedAt: Date | null;
   upvoteCount: number;
   hasUpvoted: boolean;
-  author: { id: string; firstName: string | null; lastName: string | null };
+  author: { id: string; firstName: string | null; lastName: string | null } | null;
 }
 
 export async function getReplies(

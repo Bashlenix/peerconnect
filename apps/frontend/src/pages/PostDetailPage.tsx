@@ -59,6 +59,7 @@ function formatTimeAgo(isoDate: string): string {
 }
 
 function authorName(author: Post["author"]): string {
+  if (!author) return "Deleted User";
   if (author.firstName && author.lastName) return `${author.firstName} ${author.lastName}`;
   if (author.firstName) return author.firstName;
   return "Anonymous";
@@ -76,7 +77,7 @@ function ReplyCard({ reply, postId, postAuthorId, currentUserId, onUpdated }: Re
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(reply.content);
 
-  const isAuthor = reply.author.id === currentUserId;
+  const isAuthor = reply.author !== null && reply.author.id === currentUserId;
   const isPostAuthor = postAuthorId === currentUserId;
 
   const upvoteMutation = useMutation({
@@ -395,7 +396,7 @@ export default function PostDetailPage() {
                 >
                   {CATEGORY_LABELS[post.category] ?? post.category}
                 </span>
-                {currentUser?.id === post.author.id && !editingPost && !confirmDeletePost && (
+                {post.author !== null && currentUser?.id === post.author.id && !editingPost && !confirmDeletePost && (
                   <>
                     <Button
                       variant="ghost"
@@ -507,7 +508,7 @@ export default function PostDetailPage() {
             key={reply.id}
             reply={reply}
             postId={post.id}
-            postAuthorId={post.author.id}
+            postAuthorId={post.author?.id ?? ""}
             currentUserId={currentUser.id}
             onUpdated={invalidateReplies}
           />
