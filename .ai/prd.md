@@ -73,9 +73,23 @@ PeerConnect DIT is a university-focused, community-driven Q&A platform where stu
 48. As a user, I want to see my earned badges displayed on my profile, so that others can see my reputation.
 49. As a user, I want to receive a notification when I earn a new badge, so that I am aware of my progress.
 
-### Subscription Model (Data Model Only)
-50. As a user, I want the platform to track whether I have a free or premium subscription, so that premium features can be gated in future.
+### Subscription & Premium Features
+50. As a user, I want the platform to track whether I have a free or premium subscription, so that premium features are correctly gated.
 51. As a user, I want the system to store my subscription start and end dates, so that entitlements can be calculated correctly when billing is added.
+52. As a free user, I want ads to appear in the feed, so that the platform can be sustained without a subscription fee.
+53. As a premium user, I want ads to be hidden from the feed entirely, so that my reading experience is uninterrupted.
+
+### Account Management
+54. As a user, I want to delete my account, so that I can remove my personal data from the platform.
+55. As a user, I want my posts and replies to remain on the platform after account deletion (shown as "Deleted User"), so that community knowledge is preserved even if I leave.
+
+### AI Ask Bot
+56. As a user composing a post, I want the form to silently check existing posts while I type and surface relevant source links in a suggestion panel, so that I can find existing answers before posting a duplicate question.
+57. As a user on the `/ask` page, I want to ask a freeform question and receive a synthesised answer citing real peer posts, so that I can get an immediate answer from the knowledge base.
+58. As a free user on the `/ask` page, I want to know how many AI queries I have left today, so that I can budget my usage.
+59. As a free user who has exhausted their daily AI quota, I want a clear message explaining the limit and how to unlock more, so that I understand why the feature is unavailable.
+60. As a premium user, I want unrestricted access to AI queries on both surfaces, so that my subscription delivers tangible value.
+61. As a free user using the inline pre-post helper, I want the suggestion panel to appear without consuming my daily AI quota, so that exploring existing answers doesn't penalise me for asking a question.
 
 ## Implementation Decisions
 
@@ -98,15 +112,17 @@ PeerConnect DIT is a university-focused, community-driven Q&A platform where stu
 - Tailwind CSS + shadcn/ui for styling and base components
 
 ### Database (PostgreSQL via Prisma)
-Key tables: `users`, `universities`, `posts`, `replies`, `upvotes`, `notifications`, `notification_preferences`, `badges`, `user_badges`, `subscriptions`
+Key tables: `users`, `universities`, `posts`, `replies`, `upvotes`, `notifications`, `notification_preferences`, `badges`, `user_badges`, `subscriptions`, `ai_usage_logs`, `ads`
 
 Notable schema decisions:
 - `universities(id, name, domain, is_active)` — seeded via Prisma seed script
 - `users.requires_manual_review` boolean flag for unrecognised domains
 - `posts.search_vector` generated `tsvector` column, indexed with GIN, for full-text search
 - `posts.edited_at` nullable timestamp to drive "edited" indicator
+- `posts.author_id` / `replies.author_id` nullable (`onDelete: SetNull`) to preserve content after account deletion
 - `replies.is_solution` boolean, only one true per post (enforced in application layer)
-- `subscriptions(user_id, status, start_date, end_date)` — data model only, no payment processing
+- `subscriptions(user_id, status, start_date, end_date)` — `status` is `free | premium`; acted upon for ad visibility and AI quota
+- `ai_usage_logs(user_id, date @db.Date, count)` — `@@unique([user_id, date])`; tracks daily AI usage per free user; premium users have no rows
 
 ### Deep Modules
 - **DomainValidator** — validates email domain against `universities` table; returns `{ valid, university } | { valid: false }`
@@ -115,6 +131,16 @@ Notable schema decisions:
 - **SSEManager** — maintains a registry of open SSE connections keyed by `userId`; exposes `push(userId, event)` callable from anywhere in the backend; cleans up on disconnect
 - **PostSearchService** — wraps PostgreSQL `to_tsquery` / `ts_rank` queries behind `search(query: string, filters: SearchFilters): Post[]`
 - **FeedQuery** — constructs the feed SQL query with composable filters (category, time range, subscribed-only toggle); returns paginated results
+- **AI Retrieval (`ai-retrieval.ts`)** — runs FTS against `posts` using `retrieveRelevantPosts(prisma, query)`; returns top-N posts with accepted solutions weighted higher
+- **AI Answer (`ai-answer.ts`)** — calls GPT-4.1 nano via OpenAI SDK; strict source-only system prompt; returns `{ answer, sources, confidence }`
+
+### AI Ask Bot Architecture
+- `POST /ai/ask` accepts `{ query, source?: "inline" | "ask" }`. `source` defaults to `"ask"`.
+- **Free + `source: "inline"`**: runs retrieval only, skips LLM synthesis, returns `{ answer: null, sources, confidence }`. No quota consumed.
+- **Free + `source: "ask"`**: full RAG pipeline; checks and increments `ai_usage_logs` (read before, write after success). Daily cap: 10/day, resets midnight UTC.
+- **Premium (any source)**: full RAG, no quota check.
+- Both 429 variants return `{ code: "rate_limit_burst" | "rate_limit_daily", message }` and a `Retry-After` header.
+- `GET /ai/usage` returns `{ used: number | null, limit: number | null }` — both null for premium.
 
 ### Notifications
 - Server-Sent Events (SSE) for real-time push — one-directional server-to-client, no WebSocket complexity
@@ -149,11 +175,12 @@ The following deep modules will have unit/integration tests:
 
 Shallow route handlers (auth, post, reply, notification, profile, badge routes) are not unit tested — they are covered implicitly by manual integration testing during development.
 
+7. **AI route** — integration tests cover: free+inline (FTS-only, no quota consumed), free+ask (full RAG, quota incremented after success only), premium (no quota check on either surface), burst 429 (correct `code` + `Retry-After`), daily 429 (correct `code` + `Retry-After`), OpenAI failure does not consume quota.
+
 ## Out of Scope
 
 - Location-based features (geolocation, proximity filtering, distance display)
-- Payment processing for Premium subscriptions (Stripe or any billing provider)
-- Premium entitlement enforcement (priority visibility, ad removal) — subscription data model exists but is not acted upon
+- Payment processing or upgrade flow for Premium subscriptions (Stripe or any billing provider) — subscription status is set directly in the database; no UI checkout exists
 - Admin panel UI (university domain management is handled via Prisma seed script)
 - Mobile native apps
 - Deployment infrastructure (project runs locally only)

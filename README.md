@@ -289,15 +289,16 @@ Badges are awarded automatically based on activity thresholds:
 Each badge is awarded once and never re-awarded.
 
 ### Subscription Tiers
-- **Free** — Full access to all features; ads displayed in feed.
-- **Premium** — Identical access; ads are hidden entirely.
+- **Free** — Full access to all features; ads displayed in feed. AI Ask Bot: inline pre-post helper shows FTS-only source links (no LLM synthesis, no quota consumed); explicit `/ask` page uses full RAG and counts against a **10 queries/day** cap (resets midnight UTC). A counter shows remaining queries on the `/ask` page; cap-exceeded state shows an upgrade prompt.
+- **Premium** — Ads hidden; AI Ask Bot full RAG on both surfaces, no daily cap.
 - The subscription model is data-only. No upgrade flow exists in the UI — use the pre-seeded accounts to test each tier.
 
 ### AI Ask Bot
-- **Pre-post suggestions** — While typing a new post, the form queries existing posts after 800 ms of inactivity (minimum 20 characters). If relevant answers are found, a suggestion panel appears below the textarea with a synthesised answer and links to the original posts. The post can still be submitted regardless.
-- **Standalone /ask page** — Accessible via the "Ask AI" link in the header. Students can ask a question directly and receive an answer citing source posts. A "No answers found" state links back to the feed when the knowledge base has no relevant content.
+- **Pre-post suggestions** — While typing a new post, the form queries existing posts after 800 ms of inactivity (minimum 20 characters). If relevant posts are found, a suggestion panel appears with source links. For free users this is FTS-only (no LLM call, no quota consumed). For premium users the panel also includes a synthesised answer. The post can still be submitted regardless.
+- **Standalone /ask page** — Accessible via the "Ask AI" link in the header. Full RAG for all users (free and premium). Students receive a synthesised answer citing source posts. A "No answers found" state links back to the feed when the knowledge base has no relevant content.
 - **Confidence levels** — `high` (3+ matching posts found), `low` (1–2 posts found), `none` (no matches — panel is hidden in the form, empty state shown on the /ask page).
-- **Rate limit** — 10 requests per user per minute. Exceeding the limit returns a brief error; the form remains usable.
+- **Daily cap (free tier)** — Free users may make 10 explicit `/ask` queries per day (resets midnight UTC). The inline pre-post helper does not count against this quota. The `/ask` page shows a live counter ("X of 10 AI queries used today"). On cap hit both surfaces show an upgrade prompt. Premium users have no cap.
+- **Burst rate limit** — 10 requests per user per 60 seconds (separate from the daily cap). Exceeding it returns a `429` with a `Retry-After` header indicating seconds until the window resets; the form remains usable.
 - **Requires `OPENAI_API_KEY`** — The feature is disabled (500 error) if the env var is not set. All other app features continue to work normally.
 
 ---
@@ -386,7 +387,8 @@ Open two browser windows (or use an incognito window):
 **Pre-post suggestion panel**
 - [ ] Log in and open the feed. Start typing a new post with fewer than 20 characters — confirm no suggestion panel appears.
 - [ ] Continue typing until the post reaches 20+ characters and pause for ~1 second — confirm the "Checking previous answers…" spinner appears, then a suggestion panel (or nothing if no matches).
-- [ ] Type a question on a topic that exists in the seeded posts (e.g. `"linear algebra exam"`) — confirm the panel shows an answer and at least one source link.
+- [ ] Type a question on a topic that exists in the seeded posts (e.g. `"linear algebra exam"`) — confirm the panel shows at least one source link.
+- [ ] As a **free user**: confirm the panel shows source links only (no synthesised answer paragraph). As `premium@tu-berlin.de`: confirm the panel also shows a synthesised answer above the sources.
 - [ ] Click a source link — confirm it navigates to the correct post detail page.
 - [ ] Confirm the **Post** button remains enabled throughout — the panel never blocks submission.
 
@@ -397,6 +399,12 @@ Open two browser windows (or use an incognito window):
 - [ ] Submit a question on a topic with no matching posts — confirm the empty state appears with a "Go to feed" link.
 - [ ] Click the "← Back to feed" link — confirm it returns to the feed.
 - [ ] Log out and attempt to navigate to `/ask` directly — confirm you are redirected to the login page.
+
+**Daily usage cap (free tier)**
+- [ ] Log in as `free@tu-berlin.de`. Open `/ask` — confirm the usage counter ("X of 10 AI queries used today") is visible.
+- [ ] Submit a query — confirm the counter increments.
+- [ ] Log in as `premium@tu-berlin.de`. Open `/ask` — confirm no counter is shown.
+- [ ] (Optional, requires DB manipulation) Exhaust the 10-query cap as a free user — confirm both `/ask` and the feed inline form show the upgrade CTA instead of an answer.
 
 ---
 
@@ -460,7 +468,7 @@ PeerConnect/
 │           │   ├── NotificationBell.tsx
 │           │   └── ProtectedRoute.tsx
 │           ├── api/                 # Fetch wrappers, one file per backend resource
-│           │   ├── ai.ts            # askAI() — POST /ai/ask fetch wrapper
+│           │   ├── ai.ts            # askAI(query, source), getAiUsage() — AI Ask Bot fetch wrappers
 │           ├── hooks/               # React Query hooks + auth initialisation
 │           ├── store/               # Zustand store (auth/user state)
 │           └── lib/                 # Shared utilities (cn, etc.)
@@ -487,7 +495,7 @@ To add a new feature: create a route file in `src/routes/`, register it in `app.
 
 ## Known Limitations
 
-- **Premium tier is data-only.** The subscription status is stored in the database and controls ad visibility, but there is no upgrade flow, payment processing, or paywall in the UI. Use the pre-seeded premium accounts to test the premium experience.
+- **Premium tier is data-only.** The subscription status is stored in the database and controls ad visibility and the AI daily query cap, but there is no upgrade flow, payment processing, or checkout UI. Use the pre-seeded premium accounts to test the premium experience.
 - **SSE notifications are single-process only.** The SSE manager holds open connections in memory. This works correctly for local development but would not work across multiple server instances in production (would require a Redis pub/sub layer).
 - **Registration is restricted to known university domains.** Any email address whose domain is not in the seeded university list is rejected outright at registration with a 422 error. Adding a new university requires updating the seed data and rerunning migrations — there is no admin UI for this.
 - **Text only.** Posts and replies are plain text. File and image uploads are not supported.
