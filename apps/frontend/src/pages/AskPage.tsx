@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { askAI } from "@/api/ai";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { askAI, getAiUsage } from "@/api/ai";
 import type { AiAskResponse } from "@peerconnect/shared";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuthStore } from "@/store/auth";
+
+const DAILY_LIMIT_MSG = "Daily AI limit reached";
 
 function authorName(author: { firstName: string | null; lastName: string | null }): string {
   if (author.firstName && author.lastName) return `${author.firstName} ${author.lastName}`;
@@ -19,6 +23,18 @@ export default function AskPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
+  const user = useAuthStore((s) => s.user);
+  const isFree = user?.subscription?.status === "free";
+  const queryClient = useQueryClient();
+
+  const { data: usageData } = useQuery({
+    queryKey: ["ai-usage"],
+    queryFn: getAiUsage,
+    enabled: isFree,
+  });
+
+  const isCapError = error !== null && error.includes(DAILY_LIMIT_MSG);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
@@ -30,6 +46,9 @@ export default function AskPage() {
       const data = await askAI(query.trim());
       setResult(data);
       setSubmitted(true);
+      if (isFree) {
+        void queryClient.invalidateQueries({ queryKey: ["ai-usage"] });
+      }
     } catch (err) {
       setError((err as Error).message ?? "Something went wrong");
     } finally {
@@ -57,20 +76,33 @@ export default function AskPage() {
             rows={4}
             className="resize-none"
           />
-          <Button type="submit" disabled={loading || !query.trim()}>
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Searching…
-              </span>
-            ) : (
-              "Ask"
+          <div className="flex items-center justify-between gap-4">
+            <Button type="submit" disabled={loading || !query.trim()}>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Searching…
+                </span>
+              ) : (
+                "Ask"
+              )}
+            </Button>
+            {isFree && usageData && usageData.limit !== null && (
+              <p className="text-xs text-gray-400">
+                {usageData.used ?? 0} of {usageData.limit} AI queries used today
+              </p>
             )}
-          </Button>
+          </div>
         </form>
 
-        {error && (
+        {error && !isCapError && (
           <p className="text-sm text-red-600">{error}</p>
+        )}
+
+        {isCapError && (
+          <p className="text-sm text-amber-700">
+            You've reached your 10 free AI queries for today. Upgrade to Premium for unlimited access.
+          </p>
         )}
 
         {submitted && result && result.confidence !== "none" && (

@@ -204,10 +204,12 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
   const [isUrgent, setIsUrgent] = useState(false);
   const [aiResult, setAiResult] = useState<AiAskResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiCapReached, setAiCapReached] = useState(false);
 
   useEffect(() => {
     if (content.trim().length < 20) {
       setAiResult(null);
+      setAiCapReached(false);
       setAiLoading(false);
       return;
     }
@@ -217,8 +219,11 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
       try {
         const result = await askAI(content);
         setAiResult(result);
-      } catch {
-        // Silently ignore AI errors — never surface them to the user
+      } catch (err) {
+        if ((err as Error).message?.includes("Daily AI limit reached")) {
+          setAiCapReached(true);
+        }
+        // Other errors are silently ignored
       } finally {
         setAiLoading(false);
       }
@@ -233,6 +238,7 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
       setContent("");
       setIsUrgent(false);
       setAiResult(null);
+      setAiCapReached(false);
       onSuccess();
     },
   });
@@ -258,6 +264,11 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
             <p className="text-xs text-gray-400">
               <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
               Checking previous answers…
+            </p>
+          )}
+          {!aiLoading && aiCapReached && !aiResult && (
+            <p className="text-xs text-amber-700">
+              Daily AI limit reached. Upgrade to Premium for unlimited access.
             </p>
           )}
           {!aiLoading && aiResult && aiResult.confidence !== "none" && (

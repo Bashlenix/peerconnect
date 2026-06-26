@@ -18,3 +18,20 @@ export async function askAI(query: string): Promise<AiAskResponse> {
 
   return data;
 }
+
+export interface AiUsage {
+  used: number | null;
+  limit: number | null;
+}
+
+export async function getAiUsage(): Promise<AiUsage> {
+  const res = await fetch(`${BASE}/ai/usage`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to get AI usage");
+  }
+
+  return res.json() as Promise<AiUsage>;
+}
