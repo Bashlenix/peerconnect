@@ -28,13 +28,6 @@ Every new post makes the AI more useful. Every answer the AI surfaces reduces du
 
 ---
 
-## ⚠️ Contributor Notice
-
-**New contributors are currently permitted to work on the front-end only.**
-The backend is not open for external contributions at this stage. Do not modify anything inside `apps/backend/` or `packages/shared/`. Front-end code lives in `apps/frontend/`.
-
----
-
 ## Table of Contents
 
 1. [Tech Stack](#tech-stack)
