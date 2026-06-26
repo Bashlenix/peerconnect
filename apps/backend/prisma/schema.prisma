@@ -73,6 +73,7 @@ model User {
   notificationPreferences NotificationPreference[]
   userBadges              UserBadge[]
   subscription            Subscription?
+  aiUsageLogs             AiUsageLog[]
 
   @@map("users")
 }
@@ -189,6 +190,18 @@ model Subscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("subscriptions")
+}
+
+model AiUsageLog {
+  id     String   @id @default(cuid())
+  userId String
+  date   DateTime @db.Date
+  count  Int      @default(1)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("ai_usage_logs")
 }
 
 model Ad {

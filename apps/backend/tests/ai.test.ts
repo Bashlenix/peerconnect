@@ -58,7 +58,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query(
     `TRUNCATE TABLE user_badges, notification_preferences, notifications,
-                   upvotes, replies, posts, subscriptions, users,
+                   upvotes, replies, posts, subscriptions, ai_usage_logs, users,
                    badges, universities CASCADE`
   );
   await app.close();
@@ -67,7 +67,9 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
+  await pool.query("DELETE FROM posts");
   await pool.query("DELETE FROM users");
+  await pool.query("DELETE FROM ai_usage_logs");
   rateLimitMap.clear();
 });
 
@@ -245,5 +247,117 @@ describe("POST /ai/ask", () => {
     expect(res.statusCode).toBe(429);
     const body = res.json() as { message: string };
     expect(typeof body.message).toBe("string");
+  });
+
+  // ── Daily cap (free users) ──────────────────────────────────────────────────
+
+  it("allows a free user to make up to 10 queries per day", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("ai-dailycap-ok@tu-berlin.de");
+
+    const payload = { query: "xyzzy foobarbaz nonexistent topic nomatches" };
+    const headers = { cookie: cookieHeader };
+
+    for (let i = 0; i < 10; i++) {
+      const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
+      expect(res.statusCode).toBe(200);
+      // Reset burst limiter between requests so only the daily cap is being tested
+      rateLimitMap.clear();
+    }
+  });
+
+  it("returns 429 with daily-limit message on the 11th query for a free user", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("ai-dailycap-block@tu-berlin.de");
+
+    const payload = { query: "xyzzy foobarbaz nonexistent topic nomatches" };
+    const headers = { cookie: cookieHeader };
+
+    for (let i = 0; i < 10; i++) {
+      await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
+      rateLimitMap.clear();
+    }
+
+    const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
+    expect(res.statusCode).toBe(429);
+    const body = res.json() as { message: string };
+    expect(body.message).toBe("Daily AI limit reached — upgrade to Premium for unlimited access");
+  });
+
+  it("does not block a premium user regardless of query count", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-premium@tu-berlin.de");
+
+    await prisma.subscription.update({
+      where: { userId },
+      data: { status: "premium" },
+    });
+
+    const payload = { query: "xyzzy foobarbaz nonexistent topic nomatches" };
+    const headers = { cookie: cookieHeader };
+
+    for (let i = 0; i < 15; i++) {
+      const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
+      expect(res.statusCode).toBe(200);
+      rateLimitMap.clear();
+    }
+  });
+});
+
+// ─── GET /ai/usage ────────────────────────────────────────────────────────────
+
+describe("GET /ai/usage", () => {
+  it("returns 401 when unauthenticated", async () => {
+    const res = await app.inject({ method: "GET", url: "/ai/usage" });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("returns used=0 and limit=10 for a free user with no queries today", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("ai-usage-fresh@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/ai/usage",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { used: number; limit: number };
+    expect(body.used).toBe(0);
+    expect(body.limit).toBe(10);
+  });
+
+  it("increments used count after each query for a free user", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("ai-usage-count@tu-berlin.de");
+
+    const payload = { query: "xyzzy foobarbaz nonexistent topic nomatches" };
+    const headers = { cookie: cookieHeader };
+
+    await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
+    rateLimitMap.clear();
+    await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
+
+    const res = await app.inject({ method: "GET", url: "/ai/usage", headers });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { used: number; limit: number };
+    expect(body.used).toBe(2);
+    expect(body.limit).toBe(10);
+  });
+
+  it("returns used=null and limit=null for a premium user", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-usage-premium@tu-berlin.de");
+
+    await prisma.subscription.update({
+      where: { userId },
+      data: { status: "premium" },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/ai/usage",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { used: null; limit: null };
+    expect(body.used).toBeNull();
+    expect(body.limit).toBeNull();
   });
 });
