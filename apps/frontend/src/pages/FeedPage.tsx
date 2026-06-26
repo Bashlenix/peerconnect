@@ -292,6 +292,8 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
                       <Link
                         key={source.id}
                         to={"/posts/" + source.id}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="text-blue-600 hover:underline text-xs"
                       >
                         See post by {name} →
