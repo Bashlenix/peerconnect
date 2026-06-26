@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
 import { rateLimitMap } from "../src/routes/ai.js";
+import { generateAiAnswer } from "../src/modules/ai-answer.js";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -247,6 +248,9 @@ describe("POST /ai/ask", () => {
     expect(res.statusCode).toBe(429);
     const body = res.json() as { message: string };
     expect(typeof body.message).toBe("string");
+    const retryAfter = Number(res.headers["retry-after"]);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(60);
   });
 
   // ── Daily cap (free users) ──────────────────────────────────────────────────
@@ -280,6 +284,49 @@ describe("POST /ai/ask", () => {
     expect(res.statusCode).toBe(429);
     const body = res.json() as { message: string };
     expect(body.message).toBe("Daily AI limit reached — upgrade to Premium for unlimited access");
+    const retryAfter = Number(res.headers["retry-after"]);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(86400);
+  });
+
+  // ── Increment after success ─────────────────────────────────────────────────
+
+  it("does not consume daily quota when generateAiAnswer throws", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-noinc-fail@tu-berlin.de");
+
+    vi.mocked(generateAiAnswer).mockRejectedValueOnce(new Error("OpenAI down"));
+
+    const payload = { query: "xyzzy foobarbaz nonexistent topic nomatches" };
+    const res = await app.inject({
+      method: "POST",
+      url: "/ai/ask",
+      headers: { cookie: cookieHeader },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(500);
+
+    const log = await prisma.aiUsageLog.findUnique({
+      where: { userId_date: { userId, date: new Date(new Date().setUTCHours(0, 0, 0, 0)) } },
+    });
+    expect(log).toBeNull();
+  });
+
+  it("increments daily quota exactly once on a successful request", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-noinc-ok@tu-berlin.de");
+
+    const payload = { query: "xyzzy foobarbaz nonexistent topic nomatches" };
+    await app.inject({
+      method: "POST",
+      url: "/ai/ask",
+      headers: { cookie: cookieHeader },
+      payload,
+    });
+
+    const log = await prisma.aiUsageLog.findUnique({
+      where: { userId_date: { userId, date: new Date(new Date().setUTCHours(0, 0, 0, 0)) } },
+    });
+    expect(log?.count).toBe(1);
   });
 
   it("does not block a premium user regardless of query count", async () => {

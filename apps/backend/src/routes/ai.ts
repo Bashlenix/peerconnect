@@ -15,19 +15,21 @@ const WINDOW_MS = 60_000;
 
 const AI_DAILY_LIMIT = 10;
 
-function checkRateLimit(userId: string): boolean {
+function checkRateLimit(userId: string): { allowed: boolean; retryAfter: number } {
   const now = Date.now();
   const entry = rateLimitMap.get(userId);
 
   if (!entry || now >= entry.resetAt) {
     rateLimitMap.set(userId, { count: 1, resetAt: now + WINDOW_MS });
-    return true;
+    return { allowed: true, retryAfter: 0 };
   }
 
-  if (entry.count >= RATE_LIMIT) return false;
+  if (entry.count >= RATE_LIMIT) {
+    return { allowed: false, retryAfter: Math.ceil((entry.resetAt - now) / 1000) };
+  }
 
   entry.count++;
-  return true;
+  return { allowed: true, retryAfter: 0 };
 }
 
 function todayUtc(): Date {
@@ -36,28 +38,32 @@ function todayUtc(): Date {
   return d;
 }
 
-async function checkAndIncrementDailyUsage(
+function secondsUntilMidnightUtc(): number {
+  const now = Date.now();
+  const tomorrow = new Date();
+  tomorrow.setUTCHours(24, 0, 0, 0);
+  return Math.ceil((tomorrow.getTime() - now) / 1000);
+}
+
+async function checkDailyLimit(
   userId: string,
 ): Promise<{ allowed: boolean; used: number; limit: number }> {
   const date = todayUtc();
-
   const existing = await prisma.aiUsageLog.findUnique({
     where: { userId_date: { userId, date } },
     select: { count: true },
   });
+  const used = existing?.count ?? 0;
+  return { allowed: used < AI_DAILY_LIMIT, used, limit: AI_DAILY_LIMIT };
+}
 
-  if (existing && existing.count >= AI_DAILY_LIMIT) {
-    return { allowed: false, used: existing.count, limit: AI_DAILY_LIMIT };
-  }
-
-  const log = await prisma.aiUsageLog.upsert({
+async function incrementDailyUsage(userId: string): Promise<void> {
+  const date = todayUtc();
+  await prisma.aiUsageLog.upsert({
     where: { userId_date: { userId, date } },
     update: { count: { increment: 1 } },
     create: { userId, date, count: 1 },
-    select: { count: true },
   });
-
-  return { allowed: true, used: log.count, limit: AI_DAILY_LIMIT };
 }
 
 const aiSourceSchema = {
@@ -121,8 +127,12 @@ export async function aiRoute(app: FastifyInstance) {
     async (request, reply) => {
       const { userId } = request.user;
 
-      if (!checkRateLimit(userId)) {
-        return reply.status(429).send({ message: "Too many requests — please wait a moment" });
+      const rateCheck = checkRateLimit(userId);
+      if (!rateCheck.allowed) {
+        return reply
+          .status(429)
+          .header("Retry-After", String(rateCheck.retryAfter))
+          .send({ message: "Too many requests — please wait a moment" });
       }
 
       const user = await prisma.user.findUnique({
@@ -133,10 +143,11 @@ export async function aiRoute(app: FastifyInstance) {
       const isPremium = user?.subscription?.status === "premium";
 
       if (!isPremium) {
-        const { allowed } = await checkAndIncrementDailyUsage(userId);
+        const { allowed } = await checkDailyLimit(userId);
         if (!allowed) {
           return reply
             .status(429)
+            .header("Retry-After", String(secondsUntilMidnightUtc()))
             .send({ message: "Daily AI limit reached — upgrade to Premium for unlimited access" });
         }
       }
@@ -145,6 +156,10 @@ export async function aiRoute(app: FastifyInstance) {
 
       const posts = await retrieveRelevantPosts(prisma, query);
       const result = await generateAiAnswer(query, posts);
+
+      if (!isPremium) {
+        await incrementDailyUsage(userId);
+      }
 
       return reply.status(200).send(result);
     }
