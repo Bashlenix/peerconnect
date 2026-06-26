@@ -217,7 +217,7 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
     const timer = setTimeout(async () => {
       setAiLoading(true);
       try {
-        const result = await askAI(content);
+        const result = await askAI(content, "inline");
         setAiResult(result);
       } catch (err) {
         if ((err as AiError).code === "rate_limit_daily") {
@@ -273,7 +273,7 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
           )}
           {!aiLoading && aiResult && aiResult.confidence !== "none" && (
             <div className="rounded-md bg-blue-50 border border-blue-100 p-3 text-sm space-y-2">
-              {aiResult.confidence === "high" && (
+              {aiResult.confidence === "high" && aiResult.answer && (
                 <p className="text-gray-700">{aiResult.answer}</p>
               )}
               {aiResult.confidence === "low" && (

@@ -348,6 +348,98 @@ describe("POST /ai/ask", () => {
       rateLimitMap.clear();
     }
   });
+
+  // ── Surface splitting ───────────────────────────────────────────────────────
+
+  it("free + inline: returns FTS-only result with answer=null and does not consume quota", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-inline-free@tu-berlin.de");
+
+    await prisma.post.create({
+      data: {
+        content: "student health insurance krankenkasse registration tips Germany",
+        category: "DailyLifeSupport",
+        authorId: userId,
+      },
+    });
+
+    vi.mocked(generateAiAnswer).mockClear();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/ai/ask",
+      headers: { cookie: cookieHeader },
+      payload: { query: "student health insurance registration Germany", source: "inline" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { answer: null; sources: unknown[]; confidence: string };
+    expect(body.answer).toBeNull();
+    expect(body.sources.length).toBeGreaterThan(0);
+    expect(["high", "low"]).toContain(body.confidence);
+    expect(vi.mocked(generateAiAnswer)).not.toHaveBeenCalled();
+
+    const log = await prisma.aiUsageLog.findUnique({
+      where: { userId_date: { userId, date: new Date(new Date().setUTCHours(0, 0, 0, 0)) } },
+    });
+    expect(log).toBeNull();
+  });
+
+  it("free + ask: returns full RAG result and consumes quota", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-ask-free@tu-berlin.de");
+
+    vi.mocked(generateAiAnswer).mockClear();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/ai/ask",
+      headers: { cookie: cookieHeader },
+      payload: { query: "xyzzy foobarbaz nonexistent topic nomatches", source: "ask" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(vi.mocked(generateAiAnswer)).toHaveBeenCalledOnce();
+
+    const log = await prisma.aiUsageLog.findUnique({
+      where: { userId_date: { userId, date: new Date(new Date().setUTCHours(0, 0, 0, 0)) } },
+    });
+    expect(log?.count).toBe(1);
+  });
+
+  it("premium + inline: returns full RAG result (not FTS-only)", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-inline-premium@tu-berlin.de");
+
+    await prisma.subscription.update({ where: { userId }, data: { status: "premium" } });
+
+    vi.mocked(generateAiAnswer).mockClear();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/ai/ask",
+      headers: { cookie: cookieHeader },
+      payload: { query: "xyzzy foobarbaz nonexistent topic nomatches", source: "inline" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(vi.mocked(generateAiAnswer)).toHaveBeenCalledOnce();
+  });
+
+  it("premium + ask: returns full RAG result", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("ai-ask-premium@tu-berlin.de");
+
+    await prisma.subscription.update({ where: { userId }, data: { status: "premium" } });
+
+    vi.mocked(generateAiAnswer).mockClear();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/ai/ask",
+      headers: { cookie: cookieHeader },
+      payload: { query: "xyzzy foobarbaz nonexistent topic nomatches", source: "ask" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(vi.mocked(generateAiAnswer)).toHaveBeenCalledOnce();
+  });
 });
 
 // ─── GET /ai/usage ────────────────────────────────────────────────────────────

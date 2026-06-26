@@ -5,6 +5,7 @@ import { generateAiAnswer } from "../modules/ai-answer.js";
 
 interface AskBody {
   query: string;
+  source?: "inline" | "ask";
 }
 
 // In-memory rate limit: max 10 requests per user per 60 seconds
@@ -114,6 +115,7 @@ export async function aiRoute(app: FastifyInstance) {
           required: ["query"],
           properties: {
             query: { type: "string", minLength: 10, maxLength: 500 },
+            source: { type: "string", enum: ["inline", "ask"] },
           },
         },
         response: {
@@ -161,7 +163,14 @@ export async function aiRoute(app: FastifyInstance) {
         }
       }
 
-      const { query } = request.body;
+      const { query, source } = request.body;
+
+      // Free users on the inline surface get FTS-only results — no LLM call, no quota consumed.
+      if (!isPremium && source === "inline") {
+        const posts = await retrieveRelevantPosts(prisma, query);
+        const confidence = posts.length >= 3 ? "high" : posts.length >= 1 ? "low" : "none";
+        return reply.status(200).send({ answer: null, sources: posts, confidence });
+      }
 
       const posts = await retrieveRelevantPosts(prisma, query);
       const result = await generateAiAnswer(query, posts);

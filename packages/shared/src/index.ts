@@ -25,6 +25,7 @@ export interface AiErrorResponse {
 
 export interface AiAskRequest {
   query: string;
+  source?: "inline" | "ask";
 }
 
 export interface AiAskResponse {

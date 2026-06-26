@@ -43,7 +43,7 @@ export default function AskPage() {
     setResult(null);
     setSubmitted(false);
     try {
-      const data = await askAI(query.trim());
+      const data = await askAI(query.trim(), "ask");
       setResult(data);
       setSubmitted(true);
       if (isFree) {
@@ -112,7 +112,9 @@ export default function AskPage() {
         {submitted && result && result.confidence !== "none" && (
           <div className="space-y-4">
             <div className="rounded-md border bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-800 whitespace-pre-wrap">{result.answer}</p>
+              {result.answer && (
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{result.answer}</p>
+              )}
             </div>
 
             {result.sources.length > 0 && (

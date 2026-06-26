@@ -10,12 +10,12 @@ export class AiError extends Error {
   }
 }
 
-export async function askAI(query: string): Promise<AiAskResponse> {
+export async function askAI(query: string, source?: "inline" | "ask"): Promise<AiAskResponse> {
   const res = await fetch(`${BASE}/ai/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, source }),
   });
 
   const data = (await res.json()) as AiAskResponse & { message?: string; code?: AiErrorCode };
