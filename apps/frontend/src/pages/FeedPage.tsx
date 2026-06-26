@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, MessageSquare, Loader2, Pencil, Trash2, Filter, Search, X } from "lucide-react";
-import { askAI } from "@/api/ai";
+import { askAI, AiError } from "@/api/ai";
 import type { AiAskResponse } from "@peerconnect/shared";
 import { getPosts, searchPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
 import { getAds, type Ad } from "@/api/ads";
@@ -220,7 +220,7 @@ function CreatePostForm({ onSuccess }: { onSuccess: () => void }) {
         const result = await askAI(content);
         setAiResult(result);
       } catch (err) {
-        if ((err as Error).message?.includes("Daily AI limit reached")) {
+        if ((err as AiError).code === "rate_limit_daily") {
           setAiCapReached(true);
         }
         // Other errors are silently ignored

@@ -16,6 +16,13 @@ export interface AiSource {
   author: { firstName: string | null; lastName: string | null };
 }
 
+export type AiErrorCode = "rate_limit_burst" | "rate_limit_daily";
+
+export interface AiErrorResponse {
+  code: AiErrorCode;
+  message: string;
+}
+
 export interface AiAskRequest {
   query: string;
 }

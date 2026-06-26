@@ -90,6 +90,15 @@ const errorSchema = {
   required: ["message"],
 };
 
+const aiErrorSchema = {
+  type: "object",
+  properties: {
+    code: { type: "string" },
+    message: { type: "string" },
+  },
+  required: ["code", "message"],
+};
+
 export async function aiRoute(app: FastifyInstance) {
   app.post<{ Body: AskBody }>(
     "/ai/ask",
@@ -119,7 +128,7 @@ export async function aiRoute(app: FastifyInstance) {
           },
           400: errorSchema,
           401: errorSchema,
-          429: errorSchema,
+          429: aiErrorSchema,
           500: errorSchema,
         },
       },
@@ -132,7 +141,7 @@ export async function aiRoute(app: FastifyInstance) {
         return reply
           .status(429)
           .header("Retry-After", String(rateCheck.retryAfter))
-          .send({ message: "Too many requests — please wait a moment" });
+          .send({ code: "rate_limit_burst", message: "Too many requests — please wait a moment" });
       }
 
       const user = await prisma.user.findUnique({
@@ -148,7 +157,7 @@ export async function aiRoute(app: FastifyInstance) {
           return reply
             .status(429)
             .header("Retry-After", String(secondsUntilMidnightUtc()))
-            .send({ message: "Daily AI limit reached — upgrade to Premium for unlimited access" });
+            .send({ code: "rate_limit_daily", message: "Daily AI limit reached — upgrade to Premium for unlimited access" });
         }
       }
 

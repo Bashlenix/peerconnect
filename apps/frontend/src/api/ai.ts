@@ -1,6 +1,14 @@
-import type { AiAskResponse } from "@peerconnect/shared";
+import type { AiAskResponse, AiErrorCode } from "@peerconnect/shared";
 
 const BASE = "/api";
+
+export class AiError extends Error {
+  code?: AiErrorCode;
+  constructor(message: string, code?: AiErrorCode) {
+    super(message);
+    this.code = code;
+  }
+}
 
 export async function askAI(query: string): Promise<AiAskResponse> {
   const res = await fetch(`${BASE}/ai/ask`, {
@@ -10,10 +18,10 @@ export async function askAI(query: string): Promise<AiAskResponse> {
     body: JSON.stringify({ query }),
   });
 
-  const data = (await res.json()) as AiAskResponse & { message?: string };
+  const data = (await res.json()) as AiAskResponse & { message?: string; code?: AiErrorCode };
 
   if (!res.ok) {
-    throw new Error((data as { message?: string }).message ?? "Failed to get AI answer");
+    throw new AiError(data.message ?? "Failed to get AI answer", data.code);
   }
 
   return data;

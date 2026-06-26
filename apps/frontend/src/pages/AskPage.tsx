@@ -2,13 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { askAI, getAiUsage } from "@/api/ai";
+import { askAI, getAiUsage, AiError } from "@/api/ai";
 import type { AiAskResponse } from "@peerconnect/shared";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/auth";
 
-const DAILY_LIMIT_MSG = "Daily AI limit reached";
 
 function authorName(author: { firstName: string | null; lastName: string | null }): string {
   if (author.firstName && author.lastName) return `${author.firstName} ${author.lastName}`;
@@ -33,13 +32,14 @@ export default function AskPage() {
     enabled: isFree,
   });
 
-  const isCapError = error !== null && error.includes(DAILY_LIMIT_MSG);
+  const [isCapError, setIsCapError] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
     setLoading(true);
     setError(null);
+    setIsCapError(false);
     setResult(null);
     setSubmitted(false);
     try {
@@ -50,7 +50,11 @@ export default function AskPage() {
         void queryClient.invalidateQueries({ queryKey: ["ai-usage"] });
       }
     } catch (err) {
-      setError((err as Error).message ?? "Something went wrong");
+      if ((err as AiError).code === "rate_limit_daily") {
+        setIsCapError(true);
+      } else {
+        setError((err as Error).message ?? "Something went wrong");
+      }
     } finally {
       setLoading(false);
     }
@@ -95,7 +99,7 @@ export default function AskPage() {
           </div>
         </form>
 
-        {error && !isCapError && (
+        {error && (
           <p className="text-sm text-red-600">{error}</p>
         )}
 

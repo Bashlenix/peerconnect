@@ -246,7 +246,8 @@ describe("POST /ai/ask", () => {
     // 11th request must be rejected
     const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
     expect(res.statusCode).toBe(429);
-    const body = res.json() as { message: string };
+    const body = res.json() as { code: string; message: string };
+    expect(body.code).toBe("rate_limit_burst");
     expect(typeof body.message).toBe("string");
     const retryAfter = Number(res.headers["retry-after"]);
     expect(retryAfter).toBeGreaterThan(0);
@@ -282,7 +283,8 @@ describe("POST /ai/ask", () => {
 
     const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
     expect(res.statusCode).toBe(429);
-    const body = res.json() as { message: string };
+    const body = res.json() as { code: string; message: string };
+    expect(body.code).toBe("rate_limit_daily");
     expect(body.message).toBe("Daily AI limit reached — upgrade to Premium for unlimited access");
     const retryAfter = Number(res.headers["retry-after"]);
     expect(retryAfter).toBeGreaterThan(0);
