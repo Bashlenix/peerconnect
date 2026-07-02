@@ -6,6 +6,7 @@ export interface PostAuthor {
   id: string;
   firstName: string | null;
   lastName: string | null;
+  topBadgeName: string | null;
 }
 
 export interface Post {
@@ -61,6 +62,17 @@ export async function getPosts(params?: GetPostsParams): Promise<GetPostsRespons
   }
 
   return res.json() as Promise<GetPostsResponse>;
+}
+
+export async function getPost(postId: string): Promise<Post> {
+  const res = await fetch(`${BASE}/posts/${postId}`, { credentials: "include" });
+
+  if (!res.ok) {
+    const data = (await res.json()) as { message?: string };
+    throw new Error(data.message ?? "Post not found");
+  }
+
+  return res.json() as Promise<Post>;
 }
 
 export async function createPost(input: CreatePostInput): Promise<Post> {

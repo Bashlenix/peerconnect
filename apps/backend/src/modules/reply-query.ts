@@ -8,13 +8,18 @@ export interface ReplyItem {
   editedAt: Date | null;
   upvoteCount: number;
   hasUpvoted: boolean;
-  author: { id: string; firstName: string | null; lastName: string | null } | null;
+  author: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    topBadgeName: string | null;
+  } | null;
 }
 
 export async function getReplies(
   prisma: PrismaClient,
   postId: string,
-  userId?: string
+  userId: string
 ): Promise<ReplyItem[]> {
   const replies = await prisma.reply.findMany({
     where: { postId },
@@ -30,18 +35,10 @@ export async function getReplies(
       createdAt: true,
       editedAt: true,
       _count: { select: { upvotes: true } },
-      author: { select: { id: true, firstName: true, lastName: true } },
+      upvotes: { where: { userId }, select: { userId: true } },
+      author: { select: { id: true, firstName: true, lastName: true, topBadgeName: true } },
     },
   });
-
-  let upvotedReplyIds = new Set<string>();
-  if (userId && replies.length > 0) {
-    const upvotes = await prisma.upvote.findMany({
-      where: { userId, replyId: { in: replies.map((r) => r.id) } },
-      select: { replyId: true },
-    });
-    upvotedReplyIds = new Set(upvotes.map((u) => u.replyId));
-  }
 
   return replies.map((r) => ({
     id: r.id,
@@ -50,7 +47,7 @@ export async function getReplies(
     createdAt: r.createdAt,
     editedAt: r.editedAt,
     upvoteCount: r._count.upvotes,
-    hasUpvoted: upvotedReplyIds.has(r.id),
+    hasUpvoted: r.upvotes.length > 0,
     author: r.author,
   }));
 }
