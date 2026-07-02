@@ -1,6 +1,7 @@
 import type { Prisma } from "../generated/prisma/client.js";
+import { BADGE_RULES, type BadgeEvent, type BadgeRule } from "./badge-config.js";
 
-export type BadgeEvent = "REPLY_CREATED" | "UPVOTE_RECEIVED" | "SOLUTION_MARKED";
+export type { BadgeEvent };
 
 export interface AwardedBadge {
   badgeId: string;
@@ -20,29 +21,49 @@ export async function checkAndAwardBadges(
   const ownedIds = new Set(existing.map((b) => b.badgeId));
 
   const toCheck: string[] = [];
+  const rulesForEvent = BADGE_RULES.filter((r) => r.event === event);
+
+  const filterKey = (cats: string[] | undefined) =>
+    cats ? [...cats].sort().join(",") : "";
 
   if (event === "REPLY_CREATED") {
-    const [replyCount, socialSportCount] = await Promise.all([
-      tx.reply.count({ where: { authorId: userId } }),
-      tx.reply.count({
-        where: { authorId: userId, post: { category: { in: ["Social", "Sport"] } } },
-      }),
-    ]);
-    if (replyCount >= 1) toCheck.push("First Reply");
-    if (replyCount >= 3) toCheck.push("Getting Started");
-    if (replyCount >= 10) toCheck.push("Active Helper");
-    if (socialSportCount >= 10) toCheck.push("Community Builder");
+    // Deduplicate count queries by category filter set (empty key = no filter)
+    const uniqueFilters = new Map<string, BadgeRule["categoryFilter"]>();
+    for (const rule of rulesForEvent) {
+      uniqueFilters.set(filterKey(rule.categoryFilter), rule.categoryFilter);
+    }
+
+    const countResults = await Promise.all(
+      [...uniqueFilters.values()].map((cats) =>
+        cats
+          ? tx.reply.count({ where: { authorId: userId, post: { category: { in: cats } } } })
+          : tx.reply.count({ where: { authorId: userId } })
+      )
+    );
+
+    const countMap = new Map(
+      [...uniqueFilters.keys()].map((key, i) => [key, countResults[i]!])
+    );
+
+    for (const rule of rulesForEvent) {
+      if ((countMap.get(filterKey(rule.categoryFilter)) ?? 0) >= rule.threshold) {
+        toCheck.push(rule.name);
+      }
+    }
   } else if (event === "UPVOTE_RECEIVED") {
     const upvoteCount = await tx.upvote.count({
       where: { reply: { authorId: userId } },
     });
-    if (upvoteCount >= 5) toCheck.push("Helpful Contributor");
-    if (upvoteCount >= 15) toCheck.push("Trusted Helper");
+    for (const rule of rulesForEvent) {
+      if (upvoteCount >= rule.threshold) toCheck.push(rule.name);
+    }
   } else if (event === "SOLUTION_MARKED") {
     const solutionCount = await tx.reply.count({
       where: { authorId: userId, isSolution: true },
     });
-    if (solutionCount >= 5) toCheck.push("Solution Provider");
+    for (const rule of rulesForEvent) {
+      if (solutionCount >= rule.threshold) toCheck.push(rule.name);
+    }
   }
 
   if (toCheck.length === 0) return [];

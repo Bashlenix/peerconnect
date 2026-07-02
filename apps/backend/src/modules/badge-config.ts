@@ -1,4 +1,6 @@
-import type { BadgeEvent } from "./badge-engine.js";
+import { PostCategory } from "../generated/prisma/client.js";
+
+export type BadgeEvent = "REPLY_CREATED" | "UPVOTE_RECEIVED" | "SOLUTION_MARKED";
 
 export interface BadgeRule {
   name: string;
@@ -6,7 +8,7 @@ export interface BadgeRule {
   event: BadgeEvent;
   threshold: number;
   /** When set, only replies on posts in these categories count toward the threshold. */
-  categoryFilter?: string[];
+  categoryFilter?: PostCategory[];
 }
 
 export const BADGE_NAMES = {
@@ -43,7 +45,7 @@ export const BADGE_RULES: BadgeRule[] = [
     description: "Posted 10 or more replies in Social or Sport categories",
     event: "REPLY_CREATED",
     threshold: 10,
-    categoryFilter: ["Social", "Sport"],
+    categoryFilter: [PostCategory.Social, PostCategory.Sport],
   },
   {
     name: BADGE_NAMES.HELPFUL_CONTRIBUTOR,
