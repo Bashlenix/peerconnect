@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "check:db-seed-imports": "node scripts/check-db-seed-imports.mjs",
+    "prebuild": "npm run check:db-seed-imports",
     "build": "tsc --project tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",

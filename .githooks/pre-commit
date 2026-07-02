@@ -29,4 +29,14 @@ if [ "$FOUND" -eq 1 ]; then
   exit 1
 fi
 
+# Guard the docker/db seed pipeline: seed scripts run inside the image must not
+# import from apps/backend/src (which the image never copies), or the build
+# fails with ERR_MODULE_NOT_FOUND. Only run when a relevant file is staged.
+STAGED_SEED=$(git diff --cached --name-only | grep -E '^apps/backend/(prisma/|scripts/check-db-seed-imports\.mjs)|^docker/db/seed\.sh$')
+if [ -n "$STAGED_SEED" ]; then
+  if ! node apps/backend/scripts/check-db-seed-imports.mjs; then
+    exit 1
+  fi
+fi
+
 exit 0
