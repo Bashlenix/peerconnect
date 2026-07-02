@@ -289,6 +289,81 @@ describe("PATCH /users/me", () => {
   });
 });
 
+// ─── PATCH /users/me/subscription ──────────────────────────────────────────────
+
+describe("PATCH /users/me/subscription", () => {
+  it("upgrades a free user to premium", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("upgrade@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/users/me/subscription",
+      headers: { cookie: cookieHeader },
+      payload: { status: "premium" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: "premium", endDate: null });
+
+    const subscription = await prisma.subscription.findUnique({ where: { userId } });
+    expect(subscription?.status).toBe("premium");
+  });
+
+  it("downgrades a premium user to free", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("downgrade@tu-berlin.de");
+    await prisma.subscription.update({ where: { userId }, data: { status: "premium" } });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/users/me/subscription",
+      headers: { cookie: cookieHeader },
+      payload: { status: "free" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: "free" });
+
+    const subscription = await prisma.subscription.findUnique({ where: { userId } });
+    expect(subscription?.status).toBe("free");
+  });
+
+  it("is idempotent when the user is already at the requested status", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("idempotent@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/users/me/subscription",
+      headers: { cookie: cookieHeader },
+      payload: { status: "free" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: "free" });
+  });
+
+  it("returns 400 for an invalid status value", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("invalid-status@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/users/me/subscription",
+      headers: { cookie: cookieHeader },
+      payload: { status: "gold" },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/users/me/subscription",
+      payload: { status: "premium" },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
 // ─── GET /users/me/notification-preferences ───────────────────────────────────
 
 describe("GET /users/me/notification-preferences", () => {

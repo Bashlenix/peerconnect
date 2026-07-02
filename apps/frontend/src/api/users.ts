@@ -1,3 +1,5 @@
+import type { Subscription } from "./auth";
+
 const BASE = "/api";
 
 export interface UserBadge {
@@ -59,6 +61,23 @@ export async function updateProfile(input: UpdateProfileInput): Promise<OwnProfi
 
   if (!res.ok) {
     throw new Error(data.message ?? "Failed to update profile");
+  }
+
+  return data;
+}
+
+export async function updateSubscription(status: "free" | "premium"): Promise<Subscription> {
+  const res = await fetch(`${BASE}/users/me/subscription`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ status }),
+  });
+
+  const data = (await res.json()) as Subscription & { message?: string };
+
+  if (!res.ok) {
+    throw new Error(data.message ?? "Failed to update subscription");
   }
 
   return data;

@@ -17,6 +17,10 @@ interface PatchMeBody {
   languages?: string[];
 }
 
+interface PatchMeSubscriptionBody {
+  status: "free" | "premium";
+}
+
 interface PutNotificationPreferencesBody {
   categories: string[];
 }
@@ -66,6 +70,16 @@ const errorSchema = {
   type: "object",
   properties: { message: { type: "string" } },
   required: ["message"],
+};
+
+const subscriptionSchema = {
+  type: "object",
+  properties: {
+    status: { type: "string", enum: ["free", "premium"] },
+    startDate: { type: "string", format: "date-time" },
+    endDate: { type: "string", format: "date-time", nullable: true },
+  },
+  required: ["status", "startDate", "endDate"],
 };
 
 export async function usersRoute(app: FastifyInstance) {
@@ -191,6 +205,46 @@ export async function usersRoute(app: FastifyInstance) {
       });
 
       return reply.status(200).send(updated);
+    }
+  );
+
+  // ─── PATCH /users/me/subscription ────────────────────────────────────────
+
+  app.patch<{ Body: PatchMeSubscriptionBody }>(
+    "/users/me/subscription",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Users"],
+        summary: "Mock upgrade/downgrade the authenticated user's subscription (demo only, no payment)",
+        body: {
+          type: "object",
+          required: ["status"],
+          properties: {
+            status: { type: "string", enum: ["free", "premium"] },
+          },
+        },
+        response: {
+          200: subscriptionSchema,
+          401: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.user.userId;
+      const { status } = request.body;
+
+      const subscription = await prisma.subscription.update({
+        where: { userId },
+        data: { status },
+        select: { status: true, startDate: true, endDate: true },
+      });
+
+      return reply.status(200).send({
+        status: subscription.status,
+        startDate: subscription.startDate.toISOString(),
+        endDate: subscription.endDate?.toISOString() ?? null,
+      });
     }
   );
 

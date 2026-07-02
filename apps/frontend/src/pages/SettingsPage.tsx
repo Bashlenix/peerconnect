@@ -8,6 +8,7 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
   deleteAccount,
+  updateSubscription,
   ALL_CATEGORIES,
   type UpdateProfileInput,
   type PostCategory,
@@ -85,6 +86,14 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.clear();
       navigate("/login", { replace: true });
+    },
+  });
+
+  const subscriptionMutation = useMutation({
+    mutationFn: (status: "free" | "premium") => updateSubscription(status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
     },
   });
 
@@ -241,6 +250,30 @@ export default function SettingsPage() {
                 <p className="text-sm text-gray-500 mt-1">
                   Expires:{" "}
                   {new Date(user.subscription.endDate).toLocaleDateString()}
+                </p>
+              )}
+
+              {user?.subscription?.status === "free" && (
+                <div className="mt-4">
+                  <Button
+                    type="button"
+                    disabled={subscriptionMutation.isPending}
+                    onClick={() => subscriptionMutation.mutate("premium")}
+                  >
+                    {subscriptionMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    Upgrade to Premium
+                  </Button>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Demo only — no payment is processed.
+                  </p>
+                </div>
+              )}
+
+              {subscriptionMutation.error && (
+                <p className="text-sm text-red-600 mt-2">
+                  {(subscriptionMutation.error as Error).message}
                 </p>
               )}
             </CardContent>
