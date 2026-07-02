@@ -438,3 +438,109 @@ Blockers / notes for next iteration:
   available in this session.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+feat(#58): mock premium upgrade (free → premium)
+
+Adds a self-service, non-payment way for a free user to become
+premium. Subscription.status was previously a static DB flag only
+ever set via seed scripts or direct test writes — there was no API
+endpoint or UI action to change it, so the already-implemented
+premium-gated behaviors (ad-free feed in ads.ts, unlimited AI queries
+in ai-usage.ts) could never actually be exercised by real users.
+
+Key decisions (from prior grill-me/to-issues design session):
+- Real DB toggle, not UI theater — PATCH /users/me/subscription
+  actually flips Subscription.status so premium-gated behavior
+  genuinely changes, clearly labeled "Demo only — no payment is
+  processed" rather than faking a payment flow.
+- Single PATCH endpoint taking {status: "free"|"premium"} rather than
+  two verb-style endpoints (upgrade/downgrade) — mirrors the schema
+  enum directly and is idempotent by construction.
+- No fake endDate set on upgrade — leaving it null avoids implying
+  auto-renewal/expiry logic that doesn't exist.
+- Endpoint lives in users.ts alongside the other /users/me/* routes
+  rather than a new dedicated route file, consistent with existing
+  route organization.
+- This slice only ships the upgrade direction in the UI (button shown
+  when status === "free"). Downgrade + its confirm-step UX is #59,
+  which builds on this same endpoint and mutation.
+
+Files changed:
+  apps/backend/src/routes/users.ts         (+PATCH /users/me/subscription)
+  apps/backend/tests/users.test.ts         (+5 tests: upgrade, downgrade,
+                                             idempotency, invalid status, 401)
+  apps/frontend/src/api/users.ts           (+updateSubscription)
+  apps/frontend/src/pages/SettingsPage.tsx (+Upgrade to Premium button,
+                                             demo disclaimer caption)
+
+Verified: full backend suite green (252/252, 13/13 files — 5 new tests
+for this endpoint). Frontend/backend typecheck clean, both workspace
+builds clean (tsc + vite build). Verification was via the existing
+app.inject-based test suite (real Fastify app, real test Postgres
+DB) — no browser automation tool was available this session to
+click through the Settings page UI, consistent with prior sessions
+noted in commit.md.
+
+Blockers / notes for next iteration:
+- `npm run lint` and `n8n start` from ralph/prompt.md's feedback-loop
+  list were skipped: no lint script/ESLint config exists anywhere in
+  this repo, and n8n is unrelated to this project (template leftover)
+  — neither is applicable here.
+- #59 (mock premium downgrade with confirm step) is now unblocked —
+  it extends the same button/mutation added here, no new backend work
+  beyond a downgrade-direction test.
+- UI has not been visually verified in an actual browser.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+feat(#59): mock premium downgrade (premium → free) with confirm step
+
+Extends #58's mock subscription toggle to support downgrading, with
+an inline confirmation step since downgrading has real functional
+impact (ads reappear via ads.ts, AI daily quota re-applies via
+ai-usage.ts) — unlike upgrading, which is harmless to do accidentally.
+
+Key decisions (from prior grill-me/to-issues design session):
+- No new backend endpoint — PATCH /users/me/subscription from #58
+  already accepts {status: "free"}; this issue only adds the
+  downgrade-direction UI and a test proving premium-gated logic
+  actually observes the change.
+- Confirm step mirrors the existing delete-account pattern in this
+  same file (local boolean state, Cancel resets it, Confirm fires the
+  mutation) rather than a modal/dialog component, for consistency.
+- Backend test hits GET /ai/usage (which calls the private
+  isPremiumUser() internally) before and after downgrading, rather
+  than trying to test isPremiumUser() directly — it isn't exported,
+  and this is a more realistic end-to-end assertion anyway.
+
+Files changed:
+  apps/backend/tests/users.test.ts         (+1 test: downgrade →
+                                             GET /ai/usage reflects
+                                             free-tier limits)
+  apps/frontend/src/pages/SettingsPage.tsx (+"Downgrade to Free"
+                                             button shown when premium,
+                                             inline Cancel/Confirm step)
+
+Verified: full backend suite green (253/253, 13/13 files — 1 new
+test). Typecheck and both workspace builds (tsc + vite build) clean.
+Verification was via the app.inject-based test suite (real Fastify
+app, real test Postgres DB) — no browser automation tool was
+available this session to click through the Settings page UI.
+
+Note: this commit also carries the feat(#58) log entry above — it
+was written to this file in the previous session but never actually
+committed (an oversight), so it rode along with this commit instead.
+
+Blockers / notes for next iteration:
+- Same as #58: no lint script/ESLint config exists in this repo, and
+  n8n from ralph/prompt.md's feedback-loop list is inapplicable here.
+- Both mock subscription issues (#58, #59) from the original
+  grill-me/to-issues breakdown are now closed. Feature is code-complete
+  pending a manual browser check.
+- UI still has not been visually verified in an actual browser.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -327,6 +327,33 @@ describe("PATCH /users/me/subscription", () => {
     expect(subscription?.status).toBe("free");
   });
 
+  it("downgrade is immediately reflected by premium-gated logic (GET /ai/usage)", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("downgrade-gating@tu-berlin.de");
+    await prisma.subscription.update({ where: { userId }, data: { status: "premium" } });
+
+    const premiumUsage = await app.inject({
+      method: "GET",
+      url: "/ai/usage",
+      headers: { cookie: cookieHeader },
+    });
+    expect(premiumUsage.json()).toEqual({ used: null, limit: null });
+
+    const downgrade = await app.inject({
+      method: "PATCH",
+      url: "/users/me/subscription",
+      headers: { cookie: cookieHeader },
+      payload: { status: "free" },
+    });
+    expect(downgrade.statusCode).toBe(200);
+
+    const freeUsage = await app.inject({
+      method: "GET",
+      url: "/ai/usage",
+      headers: { cookie: cookieHeader },
+    });
+    expect(freeUsage.json()).toEqual({ used: 0, limit: 10 });
+  });
+
   it("is idempotent when the user is already at the requested status", async () => {
     const { cookieHeader } = await registerVerifyAndLogin("idempotent@tu-berlin.de");
 

@@ -33,6 +33,7 @@ export default function SettingsPage() {
   const [selectedCategories, setSelectedCategories] = useState<PostCategory[]>([]);
   const [prefsSaved, setPrefsSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDowngrade, setConfirmDowngrade] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", user?.id],
@@ -94,6 +95,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
+      setConfirmDowngrade(false);
     },
   });
 
@@ -265,6 +267,51 @@ export default function SettingsPage() {
                     ) : null}
                     Upgrade to Premium
                   </Button>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Demo only — no payment is processed.
+                  </p>
+                </div>
+              )}
+
+              {user?.subscription?.status === "premium" && (
+                <div className="mt-4">
+                  {!confirmDowngrade ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={subscriptionMutation.isPending}
+                      onClick={() => setConfirmDowngrade(true)}
+                    >
+                      Downgrade to Free
+                    </Button>
+                  ) : (
+                    <div className="flex flex-col gap-3 max-w-sm">
+                      <p className="text-sm font-medium text-gray-800">
+                        Downgrade to the free plan? You'll see ads again and daily AI
+                        query limits will apply.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setConfirmDowngrade(false)}
+                          disabled={subscriptionMutation.isPending}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => subscriptionMutation.mutate("free")}
+                          disabled={subscriptionMutation.isPending}
+                        >
+                          {subscriptionMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
+                          Yes, downgrade to Free
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <p className="text-xs text-gray-400 mt-2">
                     Demo only — no payment is processed.
                   </p>
