@@ -1,5 +1,6 @@
-import type { Prisma, PostCategory } from "../generated/prisma/client.js";
-import { BADGE_RULES, type BadgeEvent, type BadgeRule } from "@peerconnect/shared";
+import type { Prisma } from "../generated/prisma/client.js";
+import { BADGE_METADATA, type BadgeEvent } from "@peerconnect/shared";
+import { BADGE_RULES } from "./badge-rules.js";
 
 export type { BadgeEvent };
 
@@ -20,58 +21,17 @@ export async function checkAndAwardBadges(
   });
   const ownedIds = new Set(existing.map((b) => b.badgeId));
 
-  const toCheck: string[] = [];
   const rulesForEvent = BADGE_RULES.filter((r) => r.event === event);
+  const results = await Promise.all(rulesForEvent.map((r) => r.check(tx, userId)));
 
-  const filterKey = (cats: string[] | undefined) =>
-    cats ? [...cats].sort().join(",") : "";
+  const eligible = rulesForEvent
+    .filter((_, i) => results[i])
+    .map((r) => r.name);
 
-  if (event === "REPLY_CREATED") {
-    // Deduplicate count queries by category filter set (empty key = no filter)
-    const uniqueFilters = new Map<string, BadgeRule["categoryFilter"]>();
-    for (const rule of rulesForEvent) {
-      uniqueFilters.set(filterKey(rule.categoryFilter), rule.categoryFilter);
-    }
-
-    const countResults = await Promise.all(
-      [...uniqueFilters.values()].map((cats) =>
-        cats
-          ? tx.reply.count({
-              where: { authorId: userId, post: { category: { in: cats as PostCategory[] } } },
-            })
-          : tx.reply.count({ where: { authorId: userId } })
-      )
-    );
-
-    const countMap = new Map(
-      [...uniqueFilters.keys()].map((key, i) => [key, countResults[i]!])
-    );
-
-    for (const rule of rulesForEvent) {
-      if ((countMap.get(filterKey(rule.categoryFilter)) ?? 0) >= rule.threshold) {
-        toCheck.push(rule.name);
-      }
-    }
-  } else if (event === "UPVOTE_RECEIVED") {
-    const upvoteCount = await tx.upvote.count({
-      where: { reply: { authorId: userId } },
-    });
-    for (const rule of rulesForEvent) {
-      if (upvoteCount >= rule.threshold) toCheck.push(rule.name);
-    }
-  } else if (event === "SOLUTION_MARKED") {
-    const solutionCount = await tx.reply.count({
-      where: { authorId: userId, isSolution: true },
-    });
-    for (const rule of rulesForEvent) {
-      if (solutionCount >= rule.threshold) toCheck.push(rule.name);
-    }
-  }
-
-  if (toCheck.length === 0) return [];
+  if (eligible.length === 0) return [];
 
   const badges = await tx.badge.findMany({
-    where: { name: { in: toCheck } },
+    where: { name: { in: eligible } },
     select: { id: true, name: true, description: true },
   });
 
@@ -82,5 +42,34 @@ export async function checkAndAwardBadges(
     data: newBadges.map((b) => ({ userId, badgeId: b.id })),
   });
 
+  await updateTopBadge(tx, userId, newBadges.map((b) => b.name));
+
   return newBadges.map((b) => ({ badgeId: b.id, name: b.name, description: b.description }));
+}
+
+function rankOf(name: string | null): number {
+  return name ? (BADGE_METADATA[name]?.rank ?? -1) : -1;
+}
+
+async function updateTopBadge(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  newBadgeNames: string[]
+): Promise<void> {
+  const user = await tx.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { topBadgeName: true },
+  });
+
+  const best = newBadgeNames.reduce<string | null>(
+    (top, name) => (rankOf(name) > rankOf(top) ? name : top),
+    user.topBadgeName
+  );
+
+  if (best !== user.topBadgeName) {
+    await tx.user.update({
+      where: { id: userId },
+      data: { topBadgeName: best, topBadgeAwardedAt: new Date() },
+    });
+  }
 }

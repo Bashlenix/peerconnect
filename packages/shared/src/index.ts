@@ -35,24 +35,8 @@ export interface AiAskResponse {
 }
 
 // ─── Badges ────────────────────────────────────────────────────────────────
-// Single source of truth for badge definitions and award thresholds. Consumed
-// by both the runtime badge engine (apps/backend/src/modules/badge-engine.ts)
-// and the reference-data seed (apps/backend/prisma/seed-data.ts).
 
 export type BadgeEvent = "REPLY_CREATED" | "UPVOTE_RECEIVED" | "SOLUTION_MARKED";
-
-export interface BadgeRule {
-  name: string;
-  description: string;
-  event: BadgeEvent;
-  threshold: number;
-  /**
-   * When set, only replies on posts in these categories count toward the
-   * threshold. Values must match the Prisma `PostCategory` enum members
-   * (e.g. "Social", "Sport") since they are used directly in DB queries.
-   */
-  categoryFilter?: string[];
-}
 
 export const BADGE_NAMES = {
   FIRST_REPLY: "First Reply",
@@ -64,48 +48,50 @@ export const BADGE_NAMES = {
   SOLUTION_PROVIDER: "Solution Provider",
 } as const;
 
-export const BADGE_RULES: BadgeRule[] = [
-  {
-    name: BADGE_NAMES.FIRST_REPLY,
+export interface BadgeMetadata {
+  description: string;
+  rank: number;
+  icon: string;
+}
+
+// Rank is the sole source of truth for "which badge is most impressive" —
+// used by badge-engine.ts to compute each user's topBadgeName, and by the
+// frontend to pick an icon/tooltip. Peer-validated badges (upvotes, accepted
+// solutions) outrank pure activity-volume badges.
+export const BADGE_METADATA: Record<string, BadgeMetadata> = {
+  [BADGE_NAMES.FIRST_REPLY]: {
     description: "Posted your first reply",
-    event: "REPLY_CREATED",
-    threshold: 1,
+    rank: 0,
+    icon: "MessageSquare",
   },
-  {
-    name: BADGE_NAMES.GETTING_STARTED,
+  [BADGE_NAMES.GETTING_STARTED]: {
     description: "Posted 3 replies",
-    event: "REPLY_CREATED",
-    threshold: 3,
+    rank: 1,
+    icon: "Footprints",
   },
-  {
-    name: BADGE_NAMES.ACTIVE_HELPER,
-    description: "Posted 10 or more replies",
-    event: "REPLY_CREATED",
-    threshold: 10,
-  },
-  {
-    name: BADGE_NAMES.COMMUNITY_BUILDER,
+  [BADGE_NAMES.COMMUNITY_BUILDER]: {
     description: "Posted 10 or more replies in Social or Sport categories",
-    event: "REPLY_CREATED",
-    threshold: 10,
-    categoryFilter: ["Social", "Sport"],
+    rank: 2,
+    icon: "Users",
   },
-  {
-    name: BADGE_NAMES.HELPFUL_CONTRIBUTOR,
+  [BADGE_NAMES.ACTIVE_HELPER]: {
+    description: "Posted 10 or more replies",
+    rank: 3,
+    icon: "Zap",
+  },
+  [BADGE_NAMES.HELPFUL_CONTRIBUTOR]: {
     description: "Received 5 upvotes on your replies",
-    event: "UPVOTE_RECEIVED",
-    threshold: 5,
+    rank: 4,
+    icon: "ThumbsUp",
   },
-  {
-    name: BADGE_NAMES.TRUSTED_HELPER,
-    description: "Received 15 upvotes on your replies",
-    event: "UPVOTE_RECEIVED",
-    threshold: 15,
-  },
-  {
-    name: BADGE_NAMES.SOLUTION_PROVIDER,
+  [BADGE_NAMES.SOLUTION_PROVIDER]: {
     description: "Had 5 replies marked as the accepted solution",
-    event: "SOLUTION_MARKED",
-    threshold: 5,
+    rank: 5,
+    icon: "CheckCircle",
   },
-];
+  [BADGE_NAMES.TRUSTED_HELPER]: {
+    description: "Received 15 upvotes on your replies",
+    rank: 6,
+    icon: "ShieldCheck",
+  },
+};

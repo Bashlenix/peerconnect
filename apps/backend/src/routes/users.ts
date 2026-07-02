@@ -43,8 +43,9 @@ const publicProfileSchema = {
     replyCount: { type: "integer" },
     solutionCount: { type: "integer" },
     badges: { type: "array", items: badgeSchema },
+    topBadgeName: { type: "string", nullable: true },
   },
-  required: ["id", "languages", "replyCount", "solutionCount", "badges"],
+  required: ["id", "languages", "replyCount", "solutionCount", "badges", "topBadgeName"],
 };
 
 const ownProfileSchema = {
@@ -99,6 +100,7 @@ export async function usersRoute(app: FastifyInstance) {
           studyProgramme: true,
           semester: true,
           languages: true,
+          topBadgeName: true,
           _count: {
             select: {
               replies: true,
@@ -129,6 +131,7 @@ export async function usersRoute(app: FastifyInstance) {
         languages: user.languages,
         replyCount: user._count.replies,
         solutionCount: user.replies.length,
+        topBadgeName: user.topBadgeName,
         badges: user.userBadges.map((ub) => ({
           name: ub.badge.name,
           description: ub.badge.description,

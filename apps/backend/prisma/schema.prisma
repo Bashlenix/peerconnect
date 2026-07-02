@@ -62,6 +62,8 @@ model User {
   refreshTokenHash        String?   @unique
   refreshTokenExpiry      DateTime?
   universityId            String?
+  topBadgeName            String?
+  topBadgeAwardedAt       DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
