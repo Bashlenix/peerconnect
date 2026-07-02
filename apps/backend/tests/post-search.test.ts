@@ -1,19 +1,10 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
 import { searchPosts } from "../src/modules/post-search.js";
-
-vi.mock("../src/modules/email-verification-service.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("../src/modules/email-verification-service.js")>();
-  return {
-    ...original,
-    sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
-  };
-});
 
 const TEST_DB_URL =
   process.env["DATABASE_URL"] ?? "postgresql://bashi@localhost:5432/peerconnect_test";
@@ -91,6 +82,25 @@ describe("PostSearchService.searchPosts", () => {
 
     expect(results.some((p) => p.content.includes("calculus"))).toBe(true);
     expect(results.every((p) => !p.content.includes("football"))).toBe(true);
+  });
+
+  it("includes the author's topBadgeName", async () => {
+    const author = await prisma.user.create({
+      data: {
+        email: "search-badge@example.com",
+        passwordHash: "hash",
+        isVerified: true,
+        topBadgeName: "Community Builder",
+      },
+      select: { id: true },
+    });
+    await prisma.post.create({
+      data: { content: "unique-keyword-for-badge-search", category: "Academic", authorId: author.id },
+    });
+
+    const results = await searchPosts(prisma, { q: "unique-keyword-for-badge-search", limit: 10, offset: 0 });
+
+    expect(results[0]!.author).toMatchObject({ topBadgeName: "Community Builder" });
   });
 
   it("matches stemmed words (e.g. 'study' matches post containing 'studying')", async () => {

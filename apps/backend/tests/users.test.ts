@@ -1,18 +1,9 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
-
-vi.mock("../src/modules/email-verification-service.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("../src/modules/email-verification-service.js")>();
-  return {
-    ...original,
-    sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
-  };
-});
 
 const TEST_DB_URL =
   process.env["DATABASE_URL"] ?? "postgresql://bashi@localhost:5432/peerconnect_test";
@@ -189,6 +180,34 @@ describe("GET /users/:id", () => {
     expect(body.badges).toHaveLength(1);
     expect(body.badges[0]).toMatchObject({ name: "First Reply" });
     expect(body.badges[0]!.awardedAt).toBeDefined();
+  });
+
+  it("exposes topBadgeName", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: "top-badge@tu-berlin.de",
+        passwordHash: "hash",
+        isVerified: true,
+        topBadgeName: "Trusted Helper",
+        topBadgeAwardedAt: new Date(),
+      },
+    });
+
+    const res = await app.inject({ method: "GET", url: `/users/${user.id}` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ topBadgeName: "Trusted Helper" });
+  });
+
+  it("returns null topBadgeName for a user with no badges", async () => {
+    const user = await prisma.user.create({
+      data: { email: "no-top-badge@tu-berlin.de", passwordHash: "hash", isVerified: true },
+    });
+
+    const res = await app.inject({ method: "GET", url: `/users/${user.id}` });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ topBadgeName: null });
   });
 });
 

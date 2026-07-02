@@ -1,19 +1,10 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
 import { getReplies } from "../src/modules/reply-query.js";
-
-vi.mock("../src/modules/email-verification-service.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("../src/modules/email-verification-service.js")>();
-  return {
-    ...original,
-    sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
-  };
-});
 
 const TEST_DB_URL =
   process.env["DATABASE_URL"] ?? "postgresql://bashi@localhost:5432/peerconnect_test";
@@ -222,6 +213,55 @@ describe("GET /posts/:id/replies", () => {
     });
     expect(replies[0].createdAt).toBeDefined();
     expect(replies[0].editedAt).toBeNull();
+  });
+
+  it("includes the reply author's topBadgeName", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("get-replies-badge-post@tu-berlin.de");
+    const replyAuthor = await prisma.user.create({
+      data: {
+        email: "get-replies-badge-author@tu-berlin.de",
+        passwordHash: "hash",
+        isVerified: true,
+        topBadgeName: "Trusted Helper",
+      },
+      select: { id: true },
+    });
+    const post = await prisma.post.create({
+      data: { content: "Question", category: "Academic" },
+      select: { id: true },
+    });
+    await prisma.reply.create({
+      data: { content: "An answer", authorId: replyAuthor.id, postId: post.id },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/posts/${post.id}/replies`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const { replies } = res.json();
+    expect(replies[0].author).toMatchObject({ topBadgeName: "Trusted Helper" });
+  });
+
+  it("returns null topBadgeName for a reply author with no badge", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("get-replies-no-badge@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Question", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+    await prisma.reply.create({ data: { content: "An answer", authorId: userId, postId: post.id } });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/posts/${post.id}/replies`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const { replies } = res.json();
+    expect(replies[0].author).toMatchObject({ topBadgeName: null });
   });
 
   it("returns 404 for a non-existent post", async () => {

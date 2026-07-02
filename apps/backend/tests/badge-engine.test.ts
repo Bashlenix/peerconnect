@@ -1,19 +1,10 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
 import { checkAndAwardBadges } from "../src/modules/badge-engine.js";
-
-vi.mock("../src/modules/email-verification-service.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("../src/modules/email-verification-service.js")>();
-  return {
-    ...original,
-    sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
-  };
-});
 
 const TEST_DB_URL =
   process.env["DATABASE_URL"] ?? "postgresql://bashi@localhost:5432/peerconnect_test";
@@ -367,6 +358,95 @@ describe("BadgeEngine.checkAndAwardBadges — idempotency", () => {
     // Verify only one badge row exists
     const count = await prisma.userBadge.count({ where: { userId } });
     expect(count).toBe(1);
+  });
+});
+
+describe("BadgeEngine.checkAndAwardBadges — topBadgeName computation", () => {
+  it("sets topBadgeName when a user earns their first badge", async () => {
+    const { userId } = await createUserWithReplies("be-top-first@tu-berlin.de", 1);
+
+    await prisma.$transaction((tx) => checkAndAwardBadges(tx, userId, "REPLY_CREATED"));
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(user.topBadgeName).toBe("First Reply");
+    expect(user.topBadgeAwardedAt).not.toBeNull();
+  });
+
+  it("picks the highest-rank badge when several are awarded in the same call", async () => {
+    const { userId } = await createUserWithReplies("be-top-multi@tu-berlin.de", 10);
+
+    // Crosses First Reply, Getting Started, and Active Helper thresholds at once.
+    await prisma.$transaction((tx) => checkAndAwardBadges(tx, userId, "REPLY_CREATED"));
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(user.topBadgeName).toBe("Active Helper");
+  });
+
+  it("does not downgrade topBadgeName when a newly-awarded badge outranks it", async () => {
+    const replyAuthor = await prisma.user.create({
+      data: { email: "be-top-noduplicate@tu-berlin.de", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    const postAuthor = await prisma.user.create({
+      data: { email: "be-top-noduplicate-post@tu-berlin.de", passwordHash: "hash", isVerified: true },
+      select: { id: true },
+    });
+    const post = await prisma.post.create({
+      data: { content: "Post", category: "Academic", authorId: postAuthor.id },
+      select: { id: true },
+    });
+    const reply = await prisma.reply.create({
+      data: { content: "Reply", authorId: replyAuthor.id, postId: post.id },
+      select: { id: true },
+    });
+    const voters = await Promise.all(
+      Array.from({ length: 15 }, (_, i) =>
+        prisma.user.create({
+          data: {
+            email: `be-top-noduplicate-voter${i}@tu-berlin.de`,
+            passwordHash: "hash",
+            isVerified: true,
+          },
+          select: { id: true },
+        })
+      )
+    );
+    await prisma.upvote.createMany({
+      data: voters.map((v) => ({ userId: v.id, replyId: reply.id })),
+    });
+
+    // Earns Helpful Contributor + Trusted Helper (rank 4 and 6) — Trusted Helper wins.
+    await prisma.$transaction((tx) =>
+      checkAndAwardBadges(tx, replyAuthor.id, "UPVOTE_RECEIVED")
+    );
+
+    let user = await prisma.user.findUniqueOrThrow({ where: { id: replyAuthor.id } });
+    expect(user.topBadgeName).toBe("Trusted Helper");
+
+    // Now earn a lower-rank badge (First Reply, rank 0) via a separate reply.
+    await prisma.reply.create({
+      data: { content: "Another reply", authorId: replyAuthor.id, postId: post.id },
+      select: { id: true },
+    });
+    await prisma.$transaction((tx) =>
+      checkAndAwardBadges(tx, replyAuthor.id, "REPLY_CREATED")
+    );
+
+    user = await prisma.user.findUniqueOrThrow({ where: { id: replyAuthor.id } });
+    expect(user.topBadgeName).toBe("Trusted Helper");
+  });
+
+  it("does not touch topBadgeName when no new badge is awarded", async () => {
+    const { userId } = await createUserWithReplies("be-top-noop@tu-berlin.de", 1);
+    await prisma.$transaction((tx) => checkAndAwardBadges(tx, userId, "REPLY_CREATED"));
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+    // Same event again — no new badges to award.
+    await prisma.$transaction((tx) => checkAndAwardBadges(tx, userId, "REPLY_CREATED"));
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+    expect(after.topBadgeName).toBe(before.topBadgeName);
+    expect(after.topBadgeAwardedAt).toStrictEqual(before.topBadgeAwardedAt);
   });
 });
 
