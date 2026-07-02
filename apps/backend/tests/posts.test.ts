@@ -1,19 +1,10 @@
-import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
 import { getFeedPosts } from "../src/modules/feed-query.js";
-
-vi.mock("../src/modules/email-verification-service.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("../src/modules/email-verification-service.js")>();
-  return {
-    ...original,
-    sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
-  };
-});
 
 const TEST_DB_URL =
   process.env["DATABASE_URL"] ?? "postgresql://bashi@localhost:5432/peerconnect_test";
@@ -44,6 +35,9 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
+  // Post.authorId is onDelete: SetNull, not Cascade — deleting users alone
+  // leaves orphaned posts behind, polluting later tests' unscoped queries.
+  await pool.query("DELETE FROM posts");
   await pool.query("DELETE FROM users");
 });
 
@@ -106,7 +100,7 @@ describe("FeedQuery.getFeedPosts", () => {
       },
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0 });
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0 });
 
     expect(posts[0].content).toBe("Newest post");
     expect(posts[1].content).toBe("Middle post");
@@ -127,7 +121,7 @@ describe("FeedQuery.getFeedPosts", () => {
       ],
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 2, offset: 0 });
+    const { posts } = await getFeedPosts(prisma, { limit: 2, offset: 0 });
 
     expect(posts).toHaveLength(2);
   });
@@ -163,8 +157,8 @@ describe("FeedQuery.getFeedPosts", () => {
       },
     });
 
-    const allPosts = await getFeedPosts(prisma, { limit: 10, offset: 0 });
-    const page2 = await getFeedPosts(prisma, { limit: 10, offset: 2 });
+    const { posts: allPosts } = await getFeedPosts(prisma, { limit: 10, offset: 0 });
+    const { posts: page2 } = await getFeedPosts(prisma, { limit: 10, offset: 2 });
 
     expect(page2).toHaveLength(1);
     expect(page2[0].id).toBe(allPosts[2].id);
@@ -186,7 +180,7 @@ describe("FeedQuery.getFeedPosts", () => {
       ],
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0 });
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0 });
 
     expect(posts[0].replyCount).toBe(2);
   });
@@ -203,7 +197,7 @@ describe("FeedQuery.getFeedPosts", () => {
       ],
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic" });
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic" });
 
     expect(posts.every((p) => p.category === "Academic")).toBe(true);
     expect(posts.some((p) => p.content === "Academic post")).toBe(true);
@@ -225,7 +219,7 @@ describe("FeedQuery.getFeedPosts", () => {
       data: { content: "Old post", category: "Academic", authorId: author.id, createdAt: oldDate },
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, since: "24h" });
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0, since: "24h" });
 
     const contents = posts.map((p) => p.content);
     expect(contents).toContain("Recent post");
@@ -245,7 +239,7 @@ describe("FeedQuery.getFeedPosts", () => {
       ],
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, subscribed: true, userId: user.id });
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0, subscribed: true, userId: user.id });
 
     expect(posts.every((p) => p.category === "Sport")).toBe(true);
     expect(posts.some((p) => p.content === "A sport post")).toBe(true);
@@ -261,7 +255,7 @@ describe("FeedQuery.getFeedPosts", () => {
       data: { content: "Any post", category: "Academic", authorId: user.id },
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, subscribed: true, userId: user.id });
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0, subscribed: true, userId: user.id });
 
     expect(posts).toHaveLength(0);
   });
@@ -282,7 +276,7 @@ describe("FeedQuery.getFeedPosts", () => {
       ],
     });
 
-    const posts = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic", since: "7d" });
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic", since: "7d" });
 
     const contents = posts.map((p) => p.content);
     expect(contents).toContain("Recent Academic");
@@ -304,12 +298,31 @@ describe("FeedQuery.getFeedPosts", () => {
     });
 
     // category=Sport is NOT in subscribed list → empty
-    const noMatch = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Sport", subscribed: true, userId: user.id });
+    const { posts: noMatch } = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Sport", subscribed: true, userId: user.id });
     expect(noMatch).toHaveLength(0);
 
     // category=Academic IS in subscribed list → returns matching post
-    const match = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic", subscribed: true, userId: user.id });
+    const { posts: match } = await getFeedPosts(prisma, { limit: 10, offset: 0, category: "Academic", subscribed: true, userId: user.id });
     expect(match.some((p) => p.content === "Academic post")).toBe(true);
+  });
+
+  it("includes the author's topBadgeName", async () => {
+    const author = await prisma.user.create({
+      data: {
+        email: "fq-badge@example.com",
+        passwordHash: "hash",
+        isVerified: true,
+        topBadgeName: "Trusted Helper",
+      },
+      select: { id: true },
+    });
+    await prisma.post.create({
+      data: { content: "Badge post", category: "Academic", authorId: author.id },
+    });
+
+    const { posts } = await getFeedPosts(prisma, { limit: 10, offset: 0 });
+
+    expect(posts[0]!.author).toMatchObject({ topBadgeName: "Trusted Helper" });
   });
 });
 
@@ -402,6 +415,21 @@ describe("POST /posts", () => {
 
     expect(res.statusCode).toBe(400);
   });
+
+  it("includes the author's topBadgeName", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("post-badge@tu-berlin.de");
+    await prisma.user.update({ where: { id: userId }, data: { topBadgeName: "Solution Provider" } });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/posts",
+      headers: { cookie: cookieHeader },
+      payload: { content: "Question", category: "Academic" },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().author).toMatchObject({ topBadgeName: "Solution Provider" });
+  });
 });
 
 // ─── GET /posts ───────────────────────────────────────────────────────────────
@@ -438,6 +466,45 @@ describe("GET /posts", () => {
     const res = await app.inject({ method: "GET", url: "/posts" });
 
     expect(res.statusCode).toBe(401);
+  });
+
+  it("includes the author's topBadgeName", async () => {
+    const author = await prisma.user.create({
+      data: {
+        email: "get-posts-badge-author@tu-berlin.de",
+        passwordHash: "hash",
+        isVerified: true,
+        topBadgeName: "Getting Started",
+      },
+      select: { id: true },
+    });
+    const { cookieHeader } = await registerVerifyAndLogin("get-posts-badge@tu-berlin.de");
+    await prisma.post.create({
+      data: { content: "Question", category: "Academic", authorId: author.id },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/posts",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().posts[0].author).toMatchObject({ topBadgeName: "Getting Started" });
+  });
+
+  it("returns null topBadgeName for an author with no badge", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("get-posts-no-badge@tu-berlin.de");
+    await prisma.post.create({ data: { content: "Question", category: "Academic", authorId: userId } });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/posts",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().posts[0].author).toMatchObject({ topBadgeName: null });
   });
 
   it("returns posts in reverse-chronological order", async () => {
@@ -568,6 +635,78 @@ describe("GET /posts", () => {
     });
 
     expect(res.statusCode).toBe(400);
+  });
+});
+
+// ─── GET /posts/:id ─────────────────────────────────────────────────────────
+
+describe("GET /posts/:id", () => {
+  it("returns a single post with correct shape", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("get-post-shape@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "A question", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/posts/${post.id}`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      id: post.id,
+      content: "A question",
+      category: "Academic",
+      isUrgent: false,
+      replyCount: 0,
+      author: { id: userId },
+    });
+  });
+
+  it("returns 404 for a non-existent post", async () => {
+    const { cookieHeader } = await registerVerifyAndLogin("get-post-404@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/posts/nonexistent-id",
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated request", async () => {
+    const res = await app.inject({ method: "GET", url: "/posts/some-id" });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("includes the author's topBadgeName", async () => {
+    const author = await prisma.user.create({
+      data: {
+        email: "get-post-badge-author@tu-berlin.de",
+        passwordHash: "hash",
+        isVerified: true,
+        topBadgeName: "Active Helper",
+      },
+      select: { id: true },
+    });
+    const { cookieHeader } = await registerVerifyAndLogin("get-post-badge@tu-berlin.de");
+    const post = await prisma.post.create({
+      data: { content: "Question", category: "Academic", authorId: author.id },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/posts/${post.id}`,
+      headers: { cookie: cookieHeader },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().author).toMatchObject({ topBadgeName: "Active Helper" });
   });
 });
 
@@ -837,6 +976,25 @@ describe("PATCH /posts/:id", () => {
     });
 
     expect(res.statusCode).toBe(401);
+  });
+
+  it("includes the author's topBadgeName", async () => {
+    const { cookieHeader, userId } = await registerVerifyAndLogin("patch-post-badge@tu-berlin.de");
+    await prisma.user.update({ where: { id: userId }, data: { topBadgeName: "First Reply" } });
+    const post = await prisma.post.create({
+      data: { content: "Original", category: "Academic", authorId: userId },
+      select: { id: true },
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/posts/${post.id}`,
+      headers: { cookie: cookieHeader },
+      payload: { content: "Updated" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().author).toMatchObject({ topBadgeName: "First Reply" });
   });
 });
 

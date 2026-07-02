@@ -4,16 +4,10 @@ import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
-import { rateLimitMap } from "../src/routes/ai.js";
+import { resetRateLimit } from "../src/modules/ai-usage.js";
 import { generateAiAnswer } from "../src/modules/ai-answer.js";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
-
-vi.mock("../src/modules/email-verification-service.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("../src/modules/email-verification-service.js")>();
-  return { ...original, sendVerificationEmail: vi.fn().mockResolvedValue(undefined) };
-});
 
 // Mock generateAiAnswer so tests never make real OpenAI calls.
 // The mock is context-aware: if retrieval returned no posts it signals confidence
@@ -71,7 +65,7 @@ afterEach(async () => {
   await pool.query("DELETE FROM posts");
   await pool.query("DELETE FROM users");
   await pool.query("DELETE FROM ai_usage_logs");
-  rateLimitMap.clear();
+  resetRateLimit();
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -266,7 +260,7 @@ describe("POST /ai/ask", () => {
       const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
       expect(res.statusCode).toBe(200);
       // Reset burst limiter between requests so only the daily cap is being tested
-      rateLimitMap.clear();
+      resetRateLimit();
     }
   });
 
@@ -278,7 +272,7 @@ describe("POST /ai/ask", () => {
 
     for (let i = 0; i < 10; i++) {
       await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
-      rateLimitMap.clear();
+      resetRateLimit();
     }
 
     const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
@@ -345,7 +339,7 @@ describe("POST /ai/ask", () => {
     for (let i = 0; i < 15; i++) {
       const res = await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
       expect(res.statusCode).toBe(200);
-      rateLimitMap.clear();
+      resetRateLimit();
     }
   });
 
@@ -472,7 +466,7 @@ describe("GET /ai/usage", () => {
     const headers = { cookie: cookieHeader };
 
     await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
-    rateLimitMap.clear();
+    resetRateLimit();
     await app.inject({ method: "POST", url: "/ai/ask", headers, payload });
 
     const res = await app.inject({ method: "GET", url: "/ai/usage", headers });

@@ -2,69 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import { retrieveRelevantPosts } from "../modules/ai-retrieval.js";
 import { generateAiAnswer } from "../modules/ai-answer.js";
+import { checkUsage, incrementDailyUsage, getUsage } from "../modules/ai-usage.js";
 
 interface AskBody {
   query: string;
   source?: "inline" | "ask";
-}
-
-// In-memory rate limit: max 10 requests per user per 60 seconds
-// Exported so integration tests can reset state between cases.
-export const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 10;
-const WINDOW_MS = 60_000;
-
-const AI_DAILY_LIMIT = 10;
-
-function checkRateLimit(userId: string): { allowed: boolean; retryAfter: number } {
-  const now = Date.now();
-  const entry = rateLimitMap.get(userId);
-
-  if (!entry || now >= entry.resetAt) {
-    rateLimitMap.set(userId, { count: 1, resetAt: now + WINDOW_MS });
-    return { allowed: true, retryAfter: 0 };
-  }
-
-  if (entry.count >= RATE_LIMIT) {
-    return { allowed: false, retryAfter: Math.ceil((entry.resetAt - now) / 1000) };
-  }
-
-  entry.count++;
-  return { allowed: true, retryAfter: 0 };
-}
-
-function todayUtc(): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
-
-function secondsUntilMidnightUtc(): number {
-  const now = Date.now();
-  const tomorrow = new Date();
-  tomorrow.setUTCHours(24, 0, 0, 0);
-  return Math.ceil((tomorrow.getTime() - now) / 1000);
-}
-
-async function checkDailyLimit(
-  userId: string,
-): Promise<{ allowed: boolean; used: number; limit: number }> {
-  const date = todayUtc();
-  const existing = await prisma.aiUsageLog.findUnique({
-    where: { userId_date: { userId, date } },
-    select: { count: true },
-  });
-  const used = existing?.count ?? 0;
-  return { allowed: used < AI_DAILY_LIMIT, used, limit: AI_DAILY_LIMIT };
-}
-
-async function incrementDailyUsage(userId: string): Promise<void> {
-  const date = todayUtc();
-  await prisma.aiUsageLog.upsert({
-    where: { userId_date: { userId, date } },
-    update: { count: { increment: 1 } },
-    create: { userId, date, count: 1 },
-  });
 }
 
 const aiSourceSchema = {
@@ -137,48 +79,27 @@ export async function aiRoute(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { userId } = request.user;
-
-      const rateCheck = checkRateLimit(userId);
-      if (!rateCheck.allowed) {
-        return reply
-          .status(429)
-          .header("Retry-After", String(rateCheck.retryAfter))
-          .send({ code: "rate_limit_burst", message: "Too many requests — please wait a moment" });
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { subscription: { select: { status: true } } },
-      });
-
-      const isPremium = user?.subscription?.status === "premium";
-
-      if (!isPremium) {
-        const { allowed } = await checkDailyLimit(userId);
-        if (!allowed) {
-          return reply
-            .status(429)
-            .header("Retry-After", String(secondsUntilMidnightUtc()))
-            .send({ code: "rate_limit_daily", message: "Daily AI limit reached — upgrade to Premium for unlimited access" });
-        }
-      }
-
       const { query, source } = request.body;
 
-      // Free users on the inline surface get FTS-only results — no LLM call, no quota consumed.
-      if (!isPremium && source === "inline") {
-        const posts = await retrieveRelevantPosts(prisma, query);
+      const check = await checkUsage(userId, source);
+
+      if ("denied" in check) {
+        const code = check.denied === "burst" ? "rate_limit_burst" : "rate_limit_daily";
+        const message = check.denied === "burst"
+          ? "Too many requests — please wait a moment"
+          : "Daily AI limit reached — upgrade to Premium for unlimited access";
+        return reply.status(429).header("Retry-After", String(check.retryAfter)).send({ code, message });
+      }
+
+      const posts = await retrieveRelevantPosts(prisma, query);
+
+      if (check.ftsOnly) {
         const confidence = posts.length >= 3 ? "high" : posts.length >= 1 ? "low" : "none";
         return reply.status(200).send({ answer: null, sources: posts, confidence });
       }
 
-      const posts = await retrieveRelevantPosts(prisma, query);
       const result = await generateAiAnswer(query, posts);
-
-      if (!isPremium) {
-        await incrementDailyUsage(userId);
-      }
-
+      if (check.shouldIncrement) await incrementDailyUsage(userId);
       return reply.status(200).send(result);
     }
   );
@@ -207,25 +128,7 @@ export async function aiRoute(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { userId } = request.user;
-
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { subscription: { select: { status: true } } },
-      });
-
-      const isPremium = user?.subscription?.status === "premium";
-
-      if (isPremium) {
-        return reply.send({ used: null, limit: null });
-      }
-
-      const today = todayUtc();
-      const log = await prisma.aiUsageLog.findUnique({
-        where: { userId_date: { userId, date: today } },
-        select: { count: true },
-      });
-
-      return reply.send({ used: log?.count ?? 0, limit: AI_DAILY_LIMIT });
+      return reply.send(await getUsage(userId));
     }
   );
 }
