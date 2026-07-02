@@ -1,0 +1,66 @@
+import type { BadgeEvent } from "./badge-engine.js";
+
+export interface BadgeRule {
+  name: string;
+  description: string;
+  event: BadgeEvent;
+  threshold: number;
+  /** When set, only replies on posts in these categories count toward the threshold. */
+  categoryFilter?: string[];
+}
+
+export const BADGE_NAMES = {
+  FIRST_REPLY: "First Reply",
+  GETTING_STARTED: "Getting Started",
+  ACTIVE_HELPER: "Active Helper",
+  COMMUNITY_BUILDER: "Community Builder",
+  HELPFUL_CONTRIBUTOR: "Helpful Contributor",
+  TRUSTED_HELPER: "Trusted Helper",
+  SOLUTION_PROVIDER: "Solution Provider",
+} as const;
+
+export const BADGE_RULES: BadgeRule[] = [
+  {
+    name: BADGE_NAMES.FIRST_REPLY,
+    description: "Posted your first reply",
+    event: "REPLY_CREATED",
+    threshold: 1,
+  },
+  {
+    name: BADGE_NAMES.GETTING_STARTED,
+    description: "Posted 3 replies",
+    event: "REPLY_CREATED",
+    threshold: 3,
+  },
+  {
+    name: BADGE_NAMES.ACTIVE_HELPER,
+    description: "Posted 10 or more replies",
+    event: "REPLY_CREATED",
+    threshold: 10,
+  },
+  {
+    name: BADGE_NAMES.COMMUNITY_BUILDER,
+    description: "Posted 10 or more replies in Social or Sport categories",
+    event: "REPLY_CREATED",
+    threshold: 10,
+    categoryFilter: ["Social", "Sport"],
+  },
+  {
+    name: BADGE_NAMES.HELPFUL_CONTRIBUTOR,
+    description: "Received 5 upvotes on your replies",
+    event: "UPVOTE_RECEIVED",
+    threshold: 5,
+  },
+  {
+    name: BADGE_NAMES.TRUSTED_HELPER,
+    description: "Received 15 upvotes on your replies",
+    event: "UPVOTE_RECEIVED",
+    threshold: 15,
+  },
+  {
+    name: BADGE_NAMES.SOLUTION_PROVIDER,
+    description: "Had 5 replies marked as the accepted solution",
+    event: "SOLUTION_MARKED",
+    threshold: 5,
+  },
+];

@@ -1,4 +1,5 @@
 import { PrismaClient } from "../src/generated/prisma/client.js";
+import { BADGE_RULES } from "../src/modules/badge-config.js";
 
 export const UNIVERSITIES = [
   { name: "TU Dortmund University", domain: "uni-dortmund.de" },
@@ -14,15 +15,7 @@ export const UNIVERSITIES = [
   { name: "Technische Hochschule Deggendorf", domain: "stud.th-deg.de" },
 ];
 
-export const BADGES = [
-  { name: "First Reply", description: "Posted your first reply" },
-  { name: "Getting Started", description: "Posted 3 replies" },
-  { name: "Active Helper", description: "Posted 10 or more replies" },
-  { name: "Community Builder", description: "Posted 10 or more replies in Social or Sport categories" },
-  { name: "Helpful Contributor", description: "Received 5 upvotes on your replies" },
-  { name: "Trusted Helper", description: "Received 15 upvotes on your replies" },
-  { name: "Solution Provider", description: "Had 5 replies marked as the accepted solution" },
-];
+export const BADGES = BADGE_RULES.map(({ name, description }) => ({ name, description }));
 
 export async function seedReferenceData(prisma: PrismaClient): Promise<void> {
   await Promise.all([
