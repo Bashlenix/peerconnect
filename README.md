@@ -24,7 +24,7 @@ Every new post makes the AI more useful. Every answer the AI surfaces reduces du
 - **Real-time notifications** — Server-Sent Events deliver replies, upvotes, and solution alerts instantly
 - **Full-text search** — PostgreSQL tsvector search with relevance ranking across all posts
 - **Badge & reputation system** — Activity-based badges reward consistent contributors
-- **Subscription tier** — Premium accounts remove ads
+- **Subscription tier** — Premium accounts remove ads; self-service mock upgrade/downgrade from the settings page (demo only, no payment)
 
 ---
 
@@ -284,7 +284,7 @@ Each badge is awarded once and never re-awarded.
 ### Subscription Tiers
 - **Free** — Full access to all features; ads displayed in feed. AI Ask Bot: inline pre-post helper shows FTS-only source links (no LLM synthesis, no quota consumed); explicit `/ask` page uses full RAG and counts against a **10 queries/day** cap (resets midnight UTC). A counter shows remaining queries on the `/ask` page; cap-exceeded state shows an upgrade prompt.
 - **Premium** — Ads hidden; AI Ask Bot full RAG on both surfaces, no daily cap.
-- The subscription model is data-only. No upgrade flow exists in the UI — use the pre-seeded accounts to test each tier.
+- **Mock upgrade/downgrade** — The profile/settings page has an "Upgrade to Premium" / "Downgrade to Free" button that toggles the subscription tier instantly. This is a demo-only mechanism with no real payment processing — it exists so the premium experience can be tested without needing the pre-seeded premium accounts. Downgrading asks for confirmation since it has a real effect (ads reappear, AI daily cap re-applies).
 
 ### AI Ask Bot
 - **Pre-post suggestions** — While typing a new post, the form queries existing posts after 800 ms of inactivity (minimum 20 characters). If relevant posts are found, a suggestion panel appears with source links. For free users this is FTS-only (no LLM call, no quota consumed). For premium users the panel also includes a synthesised answer. The post can still be submitted regardless.
@@ -372,6 +372,10 @@ Open two browser windows (or use an incognito window):
 ### 12. Ads & Subscription Tiers
 - [ ] Log in as any free-tier account — confirm ads appear in the feed between posts.
 - [ ] Log in as `premium@tu-berlin.de` or `carol@lmu.de` — confirm the feed contains no ads at all.
+- [ ] Log in as a free-tier account, go to Settings — confirm an "Upgrade to Premium" button and a "Demo only — no payment is processed" caption are shown.
+- [ ] Click "Upgrade to Premium" — confirm the plan updates to Premium immediately and ads disappear from the feed without a page reload.
+- [ ] Back on Settings, click "Downgrade to Free" — confirm an inline "Are you sure?" confirmation appears before anything happens.
+- [ ] Click Cancel — confirm nothing changes. Click "Downgrade to Free" again and confirm — the plan reverts to Free and ads reappear in the feed.
 
 ### 13. AI Ask Bot
 
@@ -488,7 +492,7 @@ To add a new feature: create a route file in `src/routes/`, register it in `app.
 
 ## Known Limitations
 
-- **Premium tier is data-only.** The subscription status is stored in the database and controls ad visibility and the AI daily query cap, but there is no upgrade flow, payment processing, or checkout UI. Use the pre-seeded premium accounts to test the premium experience.
+- **Premium tier upgrade/downgrade is mock only.** The profile/settings page lets any account toggle between Free and Premium instantly, but there is no real payment processing or checkout UI behind it — it's a self-service demo toggle. The pre-seeded premium accounts remain available too.
 - **SSE notifications are single-process only.** The SSE manager holds open connections in memory. This works correctly for local development but would not work across multiple server instances in production (would require a Redis pub/sub layer).
 - **Registration is restricted to known university domains.** Any email address whose domain is not in the seeded university list is rejected outright at registration with a 422 error. Adding a new university requires updating the seed data and rerunning migrations — there is no admin UI for this.
 - **Text only.** Posts and replies are plain text. File and image uploads are not supported.
