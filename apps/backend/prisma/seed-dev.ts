@@ -3,7 +3,22 @@ import bcrypt from "bcrypt";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
+import { BADGE_METADATA } from "@peerconnect/shared";
 import { seedReferenceData } from "./seed-data.js";
+
+// Highest-ranked badge name from a set of awarded names, mirroring the badge
+// engine's topBadge logic. Inlined here (rather than importing badge-backfill
+// from src/modules) so this seed stays runnable inside the docker/db image,
+// which only copies prisma/ and packages/shared.
+function topBadgeOf(names: string[]): string | null {
+  return names.reduce<string | null>(
+    (top, name) =>
+      (BADGE_METADATA[name]?.rank ?? -1) > (top ? (BADGE_METADATA[top]?.rank ?? -1) : -1)
+        ? name
+        : top,
+    null
+  );
+}
 
 const pool = new Pool({ connectionString: process.env["DATABASE_URL"] });
 const adapter = new PrismaPg(pool);
@@ -90,6 +105,19 @@ async function main() {
     where: { userId_badgeId: { userId: free.id, badgeId: b["First Reply"]!.id } },
     update: {},
     create: { userId: free.id, badgeId: b["First Reply"]!.id },
+  });
+
+  // Set topBadgeName so the badge indicator renders on feed/reply/post cards.
+  // Awarding userBadge rows directly bypasses the engine's updateTopBadge, so
+  // this must be set explicitly here.
+  const now = new Date();
+  await prisma.user.update({
+    where: { id: premium.id },
+    data: { topBadgeName: topBadgeOf(premiumBadgeNames), topBadgeAwardedAt: now },
+  });
+  await prisma.user.update({
+    where: { id: free.id },
+    data: { topBadgeName: "First Reply", topBadgeAwardedAt: now },
   });
 
   console.log("✓ Badges awarded");
