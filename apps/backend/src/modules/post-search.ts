@@ -18,7 +18,12 @@ export interface SearchPost {
   isUrgent: boolean;
   createdAt: Date;
   editedAt: Date | null;
-  author: { id: string; firstName: string | null; lastName: string | null };
+  author: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    topBadgeName: string | null;
+  };
   replyCount: number;
 }
 
@@ -32,6 +37,7 @@ interface RawRow {
   authorId: string;
   authorFirstName: string | null;
   authorLastName: string | null;
+  authorTopBadgeName: string | null;
   replyCount: number | bigint;
 }
 
@@ -57,6 +63,7 @@ export async function searchPosts(prisma: PrismaClient, params: SearchParams): P
       u.id AS "authorId",
       u."firstName" AS "authorFirstName",
       u."lastName" AS "authorLastName",
+      u."topBadgeName" AS "authorTopBadgeName",
       CAST(COUNT(r.id) AS int) AS "replyCount"
     FROM posts p
     JOIN users u ON u.id = p."authorId"
@@ -80,6 +87,7 @@ export async function searchPosts(prisma: PrismaClient, params: SearchParams): P
       id: row.authorId,
       firstName: row.authorFirstName,
       lastName: row.authorLastName,
+      topBadgeName: row.authorTopBadgeName,
     },
     replyCount: Number(row.replyCount),
   }));

@@ -6,10 +6,11 @@ import { askAI, AiError } from "@/api/ai";
 import type { AiAskResponse } from "@peerconnect/shared";
 import { getPosts, searchPosts, createPost, updatePost, deletePost, type PostCategory, type SinceFilter, type Post } from "@/api/posts";
 import { getAds, type Ad } from "@/api/ads";
-import { useAuthStore } from "@/store/auth";
+import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvatarDropdown } from "@/components/AvatarDropdown";
 import { AdCard } from "@/components/AdCard";
+import { AuthorLine } from "@/components/AuthorLine";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,13 +38,6 @@ function formatTimeAgo(isoDate: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function authorName(author: Post["author"]): string {
-  if (!author) return "Deleted User";
-  if (author.firstName && author.lastName) return `${author.firstName} ${author.lastName}`;
-  if (author.firstName) return author.firstName;
-  return "Anonymous";
 }
 
 interface PostCardProps {
@@ -94,7 +88,9 @@ function PostCard({ post, currentUserId, onUpdated }: PostCardProps) {
       <CardContent className="pt-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-900">{authorName(post.author)}</span>
+            <span onClick={(e) => e.stopPropagation()}>
+              <AuthorLine author={post.author} nameClassName="text-sm font-medium text-gray-900" />
+            </span>
             <span className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -428,7 +424,7 @@ function FilterPanel({
 
 export default function FeedPage() {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user } = useAuth();
 
   const [filters, setFilters] = useState<FeedFilters>({ category: "", since: "", subscribed: false });
   const [searchInput, setSearchInput] = useState("");

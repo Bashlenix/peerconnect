@@ -12,7 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  getPosts,
+  getPost,
   getReplies,
   createReply,
   upvoteReply,
@@ -23,13 +23,13 @@ import {
   removeSolution,
   updatePost,
   deletePost,
-  type Post,
   type Reply,
   type PostCategory,
 } from "@/api/posts";
-import { useAuthStore } from "@/store/auth";
+import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AvatarDropdown } from "@/components/AvatarDropdown";
+import { AuthorLine } from "@/components/AuthorLine";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -57,13 +57,6 @@ function formatTimeAgo(isoDate: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function authorName(author: Post["author"]): string {
-  if (!author) return "Deleted User";
-  if (author.firstName && author.lastName) return `${author.firstName} ${author.lastName}`;
-  if (author.firstName) return author.firstName;
-  return "Anonymous";
 }
 
 interface ReplyCardProps {
@@ -122,7 +115,7 @@ function ReplyCard({ reply, postId, postAuthorId, currentUserId, onUpdated }: Re
       <CardContent className="pt-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-900">{authorName(reply.author)}</span>
+            <AuthorLine author={reply.author} nameClassName="text-sm font-medium text-gray-900" />
             <span className="text-xs text-gray-400">{formatTimeAgo(reply.createdAt)}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -295,15 +288,16 @@ export default function PostDetailPage() {
   const { id: postId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const currentUser = useAuthStore((s) => s.user);
+  const { user: currentUser } = useAuth();
 
   const [editingPost, setEditingPost] = useState(false);
   const [editPostContent, setEditPostContent] = useState("");
   const [confirmDeletePost, setConfirmDeletePost] = useState(false);
 
-  const { data: feedData, isLoading: feedLoading } = useQuery({
-    queryKey: ["posts"],
-    queryFn: () => getPosts({ limit: 100 }),
+  const { data: post, isLoading: postLoading } = useQuery({
+    queryKey: ["post", postId],
+    queryFn: () => getPost(postId!),
+    enabled: !!postId,
   });
 
   const {
@@ -316,12 +310,11 @@ export default function PostDetailPage() {
     enabled: !!postId,
   });
 
-  const post = feedData?.posts.find((p) => p.id === postId);
-
   const editPostMutation = useMutation({
     mutationFn: (content: string) => updatePost(postId!, content),
     onSuccess: () => {
       setEditingPost(false);
+      void queryClient.invalidateQueries({ queryKey: ["post", postId] });
       void queryClient.invalidateQueries({ queryKey: ["posts"] });
     },
   });
@@ -339,7 +332,7 @@ export default function PostDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ["posts"] });
   }
 
-  if (feedLoading) {
+  if (postLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -383,7 +376,7 @@ export default function PostDetailPage() {
           <CardContent className="pt-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-900">{authorName(post.author)}</span>
+                <AuthorLine author={post.author} nameClassName="text-sm font-medium text-gray-900" />
                 <span className="text-xs text-gray-400">{formatTimeAgo(post.createdAt)}</span>
               </div>
               <div className="flex items-center gap-2">

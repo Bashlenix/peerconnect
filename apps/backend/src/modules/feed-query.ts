@@ -20,7 +20,12 @@ export interface FeedPost {
   isUrgent: boolean;
   createdAt: Date;
   editedAt: Date | null;
-  author: { id: string; firstName: string | null; lastName: string | null } | null;
+  author: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    topBadgeName: string | null;
+  } | null;
   replyCount: number;
 }
 
@@ -33,7 +38,12 @@ export function sinceDate(since: SinceFilter): Date {
   return new Date(Date.now() - msMap[since]);
 }
 
-export async function getFeedPosts(prisma: PrismaClient, params: FeedQueryParams): Promise<FeedPost[]> {
+export interface FeedResult {
+  posts: FeedPost[];
+  total: number;
+}
+
+export async function getFeedPosts(prisma: PrismaClient, params: FeedQueryParams): Promise<FeedResult> {
   let resolvedCategories: PostCategory[] | undefined;
 
   if (params.subscribed && params.userId) {
@@ -53,7 +63,7 @@ export async function getFeedPosts(prisma: PrismaClient, params: FeedQueryParams
   }
 
   if (resolvedCategories !== undefined && resolvedCategories.length === 0) {
-    return [];
+    return { posts: [], total: 0 };
   }
 
   const where: {
@@ -77,33 +87,39 @@ export async function getFeedPosts(prisma: PrismaClient, params: FeedQueryParams
   const effectiveOffset =
     params.page != null ? (params.page - 1) * params.limit : params.offset;
 
-  const posts = await prisma.post.findMany({
-    skip: effectiveOffset,
-    take: params.limit,
-    where,
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      content: true,
-      category: true,
-      isUrgent: true,
-      createdAt: true,
-      editedAt: true,
-      author: {
-        select: { id: true, firstName: true, lastName: true },
+  const [rows, total] = await Promise.all([
+    prisma.post.findMany({
+      skip: effectiveOffset,
+      take: params.limit,
+      where,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        content: true,
+        category: true,
+        isUrgent: true,
+        createdAt: true,
+        editedAt: true,
+        author: {
+          select: { id: true, firstName: true, lastName: true, topBadgeName: true },
+        },
+        _count: { select: { replies: true } },
       },
-      _count: { select: { replies: true } },
-    },
-  });
+    }),
+    prisma.post.count({ where }),
+  ]);
 
-  return posts.map((p) => ({
-    id: p.id,
-    content: p.content,
-    category: p.category as string,
-    isUrgent: p.isUrgent,
-    createdAt: p.createdAt,
-    editedAt: p.editedAt,
-    author: p.author,
-    replyCount: p._count.replies,
-  }));
+  return {
+    posts: rows.map((p) => ({
+      id: p.id,
+      content: p.content,
+      category: p.category as string,
+      isUrgent: p.isUrgent,
+      createdAt: p.createdAt,
+      editedAt: p.editedAt,
+      author: p.author,
+      replyCount: p._count.replies,
+    })),
+    total,
+  };
 }

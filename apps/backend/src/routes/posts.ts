@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import { getFeedPosts } from "../modules/feed-query.js";
-import type { SinceFilter } from "../modules/feed-query.js";
+import type { SinceFilter, FeedResult } from "../modules/feed-query.js";
 import { searchPosts } from "../modules/post-search.js";
-import type { NotificationType, PostCategory } from "../generated/prisma/client.js";
-import { sseManager } from "../modules/sse-manager.js";
+import type { PostCategory } from "../generated/prisma/client.js";
 import { checkAndAwardBadges } from "../modules/badge-engine.js";
+import { dispatch } from "../modules/notifier.js";
 
 const VALID_CATEGORIES = ["Academic", "Social", "Sport", "DailyLifeSupport"] as const;
 
@@ -62,6 +62,7 @@ const postSchema = {
         id: { type: "string" },
         firstName: { type: "string", nullable: true },
         lastName: { type: "string", nullable: true },
+        topBadgeName: { type: "string", nullable: true },
       },
       required: ["id"],
     },
@@ -76,7 +77,12 @@ function serializePost(post: {
   isUrgent: boolean;
   createdAt: Date;
   editedAt: Date | null;
-  author: { id: string; firstName: string | null; lastName: string | null } | null;
+  author: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    topBadgeName: string | null;
+  } | null;
   replyCount: number;
 }) {
   return {
@@ -138,30 +144,12 @@ export async function postsRoute(app: FastifyInstance) {
           isUrgent: true,
           createdAt: true,
           editedAt: true,
-          author: { select: { id: true, firstName: true, lastName: true } },
+          author: { select: { id: true, firstName: true, lastName: true, topBadgeName: true } },
           _count: { select: { replies: true } },
         },
       });
 
-      // Notify users subscribed to this category (fire-and-forget)
-      void (async () => {
-        const prefs = await prisma.notificationPreference.findMany({
-          where: { category: category as PostCategory, NOT: { userId: authorId } },
-          select: { userId: true },
-        });
-        if (prefs.length > 0) {
-          await prisma.notification.createMany({
-            data: prefs.map((p) => ({
-              userId: p.userId,
-              type: "NEW_POST_IN_CATEGORY" as NotificationType,
-              postId: post.id,
-            })),
-          });
-          for (const { userId: uid } of prefs) {
-            sseManager.push(uid, "notification", { type: "NEW_POST_IN_CATEGORY" });
-          }
-        }
-      })();
+      void dispatch({ type: "NEW_POST_IN_CATEGORY", postId: post.id, category, authorId });
 
       return reply.status(201).send(
         serializePost({
@@ -214,27 +202,16 @@ export async function postsRoute(app: FastifyInstance) {
     async (request, reply) => {
       const { limit = 20, offset = 0, page, category, since, subscribed, authorId } = request.query;
 
-      const where: {
-        category?: { in: (typeof VALID_CATEGORIES)[number][] };
-        createdAt?: { gte: Date };
-        authorId?: string;
-      } = {};
-      if (category) where.category = { in: [category as (typeof VALID_CATEGORIES)[number]] };
-      if (authorId) where.authorId = authorId;
-
-      const [posts, total] = await Promise.all([
-        getFeedPosts(prisma, {
-          limit,
-          offset,
-          page,
-          category: category as PostCategory | undefined,
-          since: since as SinceFilter | undefined,
-          subscribed,
-          userId: request.user.userId,
-          authorId,
-        }),
-        prisma.post.count({ where }),
-      ]);
+      const { posts, total }: FeedResult = await getFeedPosts(prisma, {
+        limit,
+        offset,
+        page,
+        category: category as PostCategory | undefined,
+        since: since as SinceFilter | undefined,
+        subscribed,
+        userId: request.user.userId,
+        authorId,
+      });
 
       return reply.status(200).send({ posts: posts.map(serializePost), total });
     }
@@ -294,6 +271,56 @@ export async function postsRoute(app: FastifyInstance) {
     }
   );
 
+  // ─── GET /posts/:id ──────────────────────────────────────────────────────
+
+  app.get<{ Params: PostParamsOnly }>(
+    "/posts/:id",
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        tags: ["Posts"],
+        summary: "Get a single post by ID",
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string" } },
+        },
+        response: {
+          200: postSchema,
+          401: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+          404: { type: "object", properties: { message: { type: "string" } }, required: ["message"] },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const post = await prisma.post.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          content: true,
+          category: true,
+          isUrgent: true,
+          createdAt: true,
+          editedAt: true,
+          author: { select: { id: true, firstName: true, lastName: true, topBadgeName: true } },
+          _count: { select: { replies: true } },
+        },
+      });
+
+      if (!post) return reply.status(404).send({ message: "Post not found" });
+
+      return reply.status(200).send(
+        serializePost({
+          ...post,
+          category: post.category as string,
+          replyCount: post._count.replies,
+        })
+      );
+    }
+  );
+
   // ─── PATCH /posts/:id ────────────────────────────────────────────────────
 
   app.patch<{ Params: PostParamsOnly; Body: UpdatePostBody }>(
@@ -343,7 +370,7 @@ export async function postsRoute(app: FastifyInstance) {
           isUrgent: true,
           createdAt: true,
           editedAt: true,
-          author: { select: { id: true, firstName: true, lastName: true } },
+          author: { select: { id: true, firstName: true, lastName: true, topBadgeName: true } },
           _count: { select: { replies: true } },
         },
       });
@@ -456,41 +483,11 @@ export async function postsRoute(app: FastifyInstance) {
         return checkAndAwardBadges(tx, replyAuthorId, "SOLUTION_MARKED");
       });
 
-      // Notify the reply author if they're different from the post author and not deleted
-      if (replyAuthorId && replyAuthorId !== userId) {
-        void (async () => {
-          const notif = await prisma.notification.create({
-            data: {
-              userId: replyAuthorId,
-              type: "REPLY_MARKED_SOLUTION" as NotificationType,
-              postId,
-              replyId,
-            },
-            select: { id: true },
-          });
-          sseManager.push(replyAuthorId, "notification", {
-            type: "REPLY_MARKED_SOLUTION",
-            notificationId: notif.id,
-          });
-        })();
-      }
-
-      for (const badge of newBadges) {
-        if (!replyAuthorId) break;
-        void (async () => {
-          const notif = await prisma.notification.create({
-            data: { userId: replyAuthorId, type: "BADGE_AWARDED" as NotificationType },
-            select: { id: true },
-          });
-          sseManager.push(replyAuthorId, "notification", {
-            type: "BADGE_AWARDED",
-            notificationId: notif.id,
-          });
-          sseManager.push(replyAuthorId, "badge_awarded", {
-            name: badge.name,
-            description: badge.description,
-          });
-        })().catch(() => {});
+      if (replyAuthorId) {
+        void dispatch({ type: "REPLY_MARKED_SOLUTION", postId, replyId, replyAuthorId, markerId: userId });
+        for (const badge of newBadges) {
+          void dispatch({ type: "BADGE_AWARDED", userId: replyAuthorId, badge });
+        }
       }
 
       return reply.status(200).send({ replyId });

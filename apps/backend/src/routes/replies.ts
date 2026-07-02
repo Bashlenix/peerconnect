@@ -1,10 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
 import { Prisma } from "../generated/prisma/client.js";
-import type { NotificationType } from "../generated/prisma/client.js";
 import { getReplies } from "../modules/reply-query.js";
-import { sseManager } from "../modules/sse-manager.js";
 import { checkAndAwardBadges, type AwardedBadge } from "../modules/badge-engine.js";
+import { dispatch } from "../modules/notifier.js";
 
 interface PostParams {
   id: string;
@@ -39,6 +38,7 @@ const replySchema = {
         id: { type: "string" },
         firstName: { type: "string", nullable: true },
         lastName: { type: "string", nullable: true },
+        topBadgeName: { type: "string", nullable: true },
       },
       required: ["id"],
     },
@@ -60,7 +60,12 @@ function serializeReply(reply: {
   editedAt: Date | null;
   upvoteCount: number;
   hasUpvoted: boolean;
-  author: { id: string; firstName: string | null; lastName: string | null } | null;
+  author: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    topBadgeName: string | null;
+  } | null;
 }) {
   return {
     id: reply.id,
@@ -74,18 +79,6 @@ function serializeReply(reply: {
   };
 }
 
-function fireBadgeNotifications(userId: string, badges: AwardedBadge[]): void {
-  for (const badge of badges) {
-    void (async () => {
-      const notif = await prisma.notification.create({
-        data: { userId, type: "BADGE_AWARDED" as NotificationType },
-        select: { id: true },
-      });
-      sseManager.push(userId, "notification", { type: "BADGE_AWARDED", notificationId: notif.id });
-      sseManager.push(userId, "badge_awarded", { name: badge.name, description: badge.description });
-    })().catch(() => {});
-  }
-}
 
 export async function repliesRoute(app: FastifyInstance) {
   // ─── GET /posts/:id/replies ───────────────────────────────────────────────
@@ -173,34 +166,19 @@ export async function repliesRoute(app: FastifyInstance) {
             createdAt: true,
             editedAt: true,
             _count: { select: { upvotes: true } },
-            author: { select: { id: true, firstName: true, lastName: true } },
+            author: { select: { id: true, firstName: true, lastName: true, topBadgeName: true } },
           },
         });
         const badges = await checkAndAwardBadges(tx, authorId, "REPLY_CREATED");
         return [c, badges] as const;
       });
 
-      // Notify the post author if they didn't reply to their own post and if post author exists
-      if (post.authorId && post.authorId !== authorId) {
-        const postAuthorId = post.authorId;
-        void (async () => {
-          const notif = await prisma.notification.create({
-            data: {
-              userId: postAuthorId,
-              type: "REPLY_TO_POST" as NotificationType,
-              postId,
-              replyId: created.id,
-            },
-            select: { id: true },
-          });
-          sseManager.push(postAuthorId, "notification", {
-            type: "REPLY_TO_POST",
-            notificationId: notif.id,
-          });
-        })();
+      if (post.authorId) {
+        void dispatch({ type: "REPLY_TO_POST", postId, replyId: created.id, postAuthorId: post.authorId, replyAuthorId: authorId });
       }
-
-      fireBadgeNotifications(authorId, newBadges);
+      for (const badge of newBadges) {
+        void dispatch({ type: "BADGE_AWARDED", userId: authorId, badge });
+      }
 
       return reply.status(201).send(
         serializeReply({ ...created, upvoteCount: created._count.upvotes, hasUpvoted: false })
@@ -270,28 +248,11 @@ export async function repliesRoute(app: FastifyInstance) {
 
       const { upvoteCount, newBadges } = result;
 
-      // Notify the reply author if they didn't upvote their own reply and reply author exists
-      if (existing.authorId && existing.authorId !== userId) {
-        const replyAuthorId = existing.authorId;
-        void (async () => {
-          const notif = await prisma.notification.create({
-            data: {
-              userId: replyAuthorId,
-              type: "REPLY_UPVOTED" as NotificationType,
-              postId: existing.postId,
-              replyId,
-            },
-            select: { id: true },
-          });
-          sseManager.push(replyAuthorId, "notification", {
-            type: "REPLY_UPVOTED",
-            notificationId: notif.id,
-          });
-        })();
-      }
-
       if (existing.authorId) {
-        fireBadgeNotifications(existing.authorId, newBadges);
+        void dispatch({ type: "REPLY_UPVOTED", postId: existing.postId, replyId, replyAuthorId: existing.authorId, voterId: userId });
+        for (const badge of newBadges) {
+          void dispatch({ type: "BADGE_AWARDED", userId: existing.authorId, badge });
+        }
       }
 
       return reply.status(201).send({ upvoteCount });
@@ -391,7 +352,7 @@ export async function repliesRoute(app: FastifyInstance) {
           editedAt: true,
           _count: { select: { upvotes: true } },
           upvotes: { where: { userId }, select: { id: true } },
-          author: { select: { id: true, firstName: true, lastName: true } },
+          author: { select: { id: true, firstName: true, lastName: true, topBadgeName: true } },
         },
       });
 
