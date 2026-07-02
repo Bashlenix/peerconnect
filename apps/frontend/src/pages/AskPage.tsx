@@ -6,7 +6,7 @@ import { askAI, getAiUsage, AiError } from "@/api/ai";
 import type { AiAskResponse } from "@peerconnect/shared";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuthStore } from "@/store/auth";
+import { useAuth } from "@/hooks/useAuth";
 
 
 function authorName(author: { firstName: string | null; lastName: string | null }): string {
@@ -22,7 +22,7 @@ export default function AskPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  const user = useAuthStore((s) => s.user);
+  const { user } = useAuth();
   const isFree = user?.subscription?.status === "free";
   const queryClient = useQueryClient();
 

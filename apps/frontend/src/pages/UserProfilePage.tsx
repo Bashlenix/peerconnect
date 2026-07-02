@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, MessageSquare, CheckCircle, AlertCircle, Pencil, Trash2 } from "lucide-react";
 import { getPublicProfile } from "@/api/users";
 import { getPosts, updatePost, deletePost, type Post } from "@/api/posts";
-import { useAuthStore } from "@/store/auth";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -199,7 +199,7 @@ function ProfilePostCard({ post, currentUserId, onUpdated }: ProfilePostCardProp
 
 function PostsTab({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [allPosts, setAllPosts] = useState<Post[]>([]);
   const [hasMore, setHasMore] = useState(true);
@@ -366,7 +366,7 @@ export default function UserProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("posts");
-  const { user: currentUser } = useAuthStore();
+  const { user: currentUser } = useAuth();
   const isOwnProfile = !!currentUser && currentUser.id === id;
 
   const { data: profile, isLoading, isError } = useQuery({

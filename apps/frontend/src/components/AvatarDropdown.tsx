@@ -2,7 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { logout } from "@/api/auth";
-import { useAuthStore } from "@/store/auth";
+import { useAuth } from "@/hooks/useAuth";
 import type { AuthUser } from "@/api/auth";
 
 function getInitials(user: AuthUser): string {
@@ -18,14 +18,13 @@ function getInitials(user: AuthUser): string {
 export function AvatarDropdown() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, clearAuth } = useAuthStore();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
-      clearAuth();
       queryClient.clear();
       navigate("/login", { replace: true });
     },

@@ -1,12 +1,12 @@
 import { Navigate } from "react-router-dom";
-import { useAuthStore } from "../store/auth";
+import { useAuth } from "../hooks/useAuth";
 
 interface Props {
   children: React.ReactNode;
 }
 
 export default function ProtectedRoute({ children }: Props) {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (

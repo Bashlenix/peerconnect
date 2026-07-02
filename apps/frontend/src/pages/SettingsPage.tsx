@@ -12,7 +12,7 @@ import {
   type UpdateProfileInput,
   type PostCategory,
 } from "@/api/users";
-import { useAuthStore } from "@/store/auth";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function SettingsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, clearAuth } = useAuthStore();
+  const { user } = useAuth();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -83,7 +83,6 @@ export default function SettingsPage() {
   const deleteAccountMutation = useMutation({
     mutationFn: deleteAccount,
     onSuccess: () => {
-      clearAuth();
       queryClient.clear();
       navigate("/login", { replace: true });
     },

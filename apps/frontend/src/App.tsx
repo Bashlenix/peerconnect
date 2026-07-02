@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useInitAuth } from "./hooks/useInitAuth";
+import { useAuth } from "./hooks/useAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RegisterPage from "./pages/RegisterPage";
 import CheckEmailPage from "./pages/CheckEmailPage";
@@ -10,17 +10,13 @@ import AskPage from "./pages/AskPage";
 import PostDetailPage from "./pages/PostDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import UserProfilePage from "./pages/UserProfilePage";
-import { useAuthStore } from "./store/auth";
-
 function ProfileRedirect() {
-  const { user } = useAuthStore();
+  const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   return <Navigate to={`/users/${user.id}`} replace />;
 }
 
 function AppRoutes() {
-  useInitAuth();
-
   return (
     <Routes>
       <Route path="/register" element={<RegisterPage />} />

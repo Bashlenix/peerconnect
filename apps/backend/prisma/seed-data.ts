@@ -1,5 +1,5 @@
 import { PrismaClient } from "../src/generated/prisma/client.js";
-import { BADGE_RULES } from "@peerconnect/shared";
+import { BADGE_RULES } from "../src/modules/badge-rules.js";
 
 export const UNIVERSITIES = [
   { name: "TU Dortmund University", domain: "uni-dortmund.de" },

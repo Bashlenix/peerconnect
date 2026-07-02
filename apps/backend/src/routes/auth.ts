@@ -1,24 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import bcrypt from "bcrypt";
 import { prisma } from "../db.js";
-import { validateEmailDomain } from "../modules/domain-validator.js";
-import {
-  generateToken,
-  saveToken,
-  sendVerificationEmail,
-  confirmEmail,
-} from "../modules/email-verification-service.js";
-import {
-  generateRefreshToken,
-  saveRefreshToken,
-  verifyRefreshToken,
-  clearRefreshToken,
-  setAccessTokenCookie,
-  setRefreshTokenCookie,
-  clearAuthCookies,
-} from "../modules/token-service.js";
+import { register, verifyEmail, login, verifyRefreshToken, logout } from "../modules/auth-service.js";
+import { setAccessTokenCookie, setRefreshTokenCookie, clearAuthCookies } from "../modules/token-service.js";
 
-const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = "15m";
 
 interface RegisterBody {
@@ -75,40 +59,14 @@ export async function authRoute(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { email, password } = request.body;
-      const normalised = email.toLowerCase().trim();
+      const result = await register(email, password);
 
-      const existing = await prisma.user.findUnique({
-        where: { email: normalised },
-        select: { id: true },
-      });
-      if (existing) {
-        return reply.status(409).send({ message: "Email already registered" });
-      }
-
-      const domainResult = await validateEmailDomain(normalised);
-      if (!domainResult.valid) {
+      if (!result.ok) {
+        if (result.reason === "email_taken") return reply.status(409).send({ message: "Email already registered" });
         return reply.status(422).send({ message: "Only university email addresses are allowed." });
       }
 
-      const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-
-      const user = await prisma.user.create({
-        data: {
-          email: normalised,
-          passwordHash,
-          universityId: domainResult.university.id,
-          subscription: { create: {} },
-        },
-        select: { id: true },
-      });
-
-      const token = generateToken();
-      await saveToken(user.id, token);
-      await sendVerificationEmail(normalised, token);
-
-      return reply.status(201).send({
-        message: "Registration successful. Please verify your email.",
-      });
+      return reply.status(201).send({ message: "Registration successful. Please verify your email." });
     }
   );
 
@@ -143,14 +101,12 @@ export async function authRoute(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { token } = request.query;
+      const result = await verifyEmail(token);
 
-      const result = await confirmEmail(token);
-
-      if (!result.success) {
-        const message =
-          result.reason === "expired"
-            ? "Verification link has expired. Please request a new one."
-            : "Invalid verification token.";
+      if (!result.ok) {
+        const message = result.reason === "expired"
+          ? "Verification link has expired. Please request a new one."
+          : "Invalid verification token.";
         return reply.status(400).send({ message });
       }
 
@@ -206,36 +162,18 @@ export async function authRoute(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { email, password } = request.body;
-      const normalised = email.toLowerCase().trim();
+      const result = await login(email, password);
 
-      const user = await prisma.user.findUnique({
-        where: { email: normalised },
-        select: { id: true, email: true, passwordHash: true, isVerified: true, firstName: true, lastName: true },
-      });
-
-      if (!user) {
+      if (!result.ok) {
+        if (result.reason === "not_verified") return reply.status(403).send({ message: "Please verify your email before logging in" });
         return reply.status(401).send({ message: "Invalid email or password" });
       }
 
-      const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-      if (!passwordMatch) {
-        return reply.status(401).send({ message: "Invalid email or password" });
-      }
-
-      if (!user.isVerified) {
-        return reply.status(403).send({ message: "Please verify your email before logging in" });
-      }
-
-      const accessToken = app.jwt.sign({ userId: user.id, email: user.email }, { expiresIn: ACCESS_TOKEN_TTL });
-      const refreshToken = generateRefreshToken();
-      await saveRefreshToken(user.id, refreshToken);
-
+      const accessToken = app.jwt.sign({ userId: result.user.id, email: result.user.email }, { expiresIn: ACCESS_TOKEN_TTL });
       setAccessTokenCookie(reply, accessToken);
-      setRefreshTokenCookie(reply, refreshToken);
+      setRefreshTokenCookie(reply, result.refreshToken);
 
-      return reply.status(200).send({
-        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
-      });
+      return reply.status(200).send({ user: result.user });
     }
   );
 
@@ -364,20 +302,13 @@ export async function authRoute(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      // Best-effort: try to identify user and clear refresh token from DB
+      let userId: string | undefined;
       try {
         await request.jwtVerify();
-        await clearRefreshToken(request.user.userId);
-      } catch {
-        const refreshToken = request.cookies["refresh_token"];
-        if (refreshToken) {
-          const user = await verifyRefreshToken(refreshToken);
-          if (user) {
-            await clearRefreshToken(user.id);
-          }
-        }
-      }
+        userId = request.user.userId;
+      } catch { /* best-effort */ }
 
+      await logout(userId, userId ? undefined : request.cookies["refresh_token"]);
       clearAuthCookies(reply);
       return reply.status(200).send({ message: "Logged out successfully" });
     }

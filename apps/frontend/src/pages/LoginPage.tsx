@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link, Navigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { login } from "@/api/auth";
-import { useAuthStore } from "@/store/auth";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,14 +10,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading, setAuth } = useAuthStore();
+  const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const mutation = useMutation({
     mutationFn: () => login(email, password),
-    onSuccess: (data) => {
-      setAuth({ ...data.user, isVerified: true });
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       navigate("/feed", { replace: true });
     },
   });
