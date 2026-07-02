@@ -32,6 +32,10 @@ COPY apps/backend/prisma/          ./apps/backend/prisma/
 COPY apps/backend/prisma.config.ts ./apps/backend/
 COPY apps/backend/tsconfig.json    ./apps/backend/
 
+# Build the shared package — seed scripts import @peerconnect/shared (badge
+# rules, etc.) at runtime, which resolves to packages/shared/dist.
+RUN npm run build --workspace=packages/shared
+
 # Generate Prisma client — creates apps/backend/src/generated/ at build time.
 RUN cd apps/backend && npx prisma generate
 

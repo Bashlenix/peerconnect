@@ -267,7 +267,7 @@ These accounts give you a realistic multi-user feed with posts and replies sprea
 - Users can edit their own profile (name, study programme, semester, languages).
 
 ### Badge System
-Badges are awarded automatically based on activity thresholds. All thresholds and descriptions live in `badge-config.ts`; the engine reads from that config and has no hardcoded values.
+Badges are awarded automatically based on activity thresholds. All names, descriptions, and thresholds live in one place — `BADGE_RULES` in `packages/shared/src/index.ts`. Both the runtime badge engine and the reference-data seed read from it, so the table below and the seeded `badge` rows can never drift.
 
 | Badge | Trigger | Threshold |
 |---|---|---|
@@ -432,8 +432,7 @@ PeerConnect/
 │   │   │   ├── modules/             # Domain logic extracted from routes
 │   │   │   │   ├── ai-retrieval.ts        # FTS retrieval for AI Ask Bot (top-N posts + accepted solutions)
 │   │   │   │   ├── ai-answer.ts           # GPT-4.1-nano synthesis — strict source-only prompt
-│   │   │   │   ├── badge-config.ts        # BADGE_RULES — all badge names, thresholds, events (single source of truth)
-│   │   │   │   ├── badge-engine.ts        # Badge award logic — data-driven loop over BADGE_RULES (atomic)
+│   │   │   │   ├── badge-engine.ts        # Badge award logic — data-driven loop over BADGE_RULES from @peerconnect/shared (atomic)
 │   │   │   │   ├── domain-validator.ts    # University email domain checks
 │   │   │   │   ├── email-verification-service.ts
 │   │   │   │   ├── feed-query.ts          # Composable Prisma filters for the post feed
@@ -468,7 +467,7 @@ PeerConnect/
 │           └── lib/                 # Shared utilities (cn, etc.)
 │
 ├── packages/
-│   └── shared/                      # TypeScript types shared between backend and frontend
+│   └── shared/                      # Types + BADGE_RULES shared between backend and frontend (single source of truth for badges)
 │
 └── docker/
     └── db/

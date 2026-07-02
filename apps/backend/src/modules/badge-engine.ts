@@ -1,5 +1,5 @@
-import type { Prisma } from "../generated/prisma/client.js";
-import { BADGE_RULES, type BadgeEvent, type BadgeRule } from "./badge-config.js";
+import type { Prisma, PostCategory } from "../generated/prisma/client.js";
+import { BADGE_RULES, type BadgeEvent, type BadgeRule } from "@peerconnect/shared";
 
 export type { BadgeEvent };
 
@@ -36,7 +36,9 @@ export async function checkAndAwardBadges(
     const countResults = await Promise.all(
       [...uniqueFilters.values()].map((cats) =>
         cats
-          ? tx.reply.count({ where: { authorId: userId, post: { category: { in: cats } } } })
+          ? tx.reply.count({
+              where: { authorId: userId, post: { category: { in: cats as PostCategory[] } } },
+            })
           : tx.reply.count({ where: { authorId: userId } })
       )
     );
