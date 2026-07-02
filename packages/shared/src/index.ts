@@ -60,7 +60,7 @@ export interface BadgeMetadata {
 // solutions) outrank pure activity-volume badges.
 export const BADGE_METADATA: Record<string, BadgeMetadata> = {
   [BADGE_NAMES.FIRST_REPLY]: {
-    description: "Posted your first reply",
+    description: "Posted first reply",
     rank: 0,
     icon: "MessageSquare",
   },
@@ -80,7 +80,7 @@ export const BADGE_METADATA: Record<string, BadgeMetadata> = {
     icon: "Zap",
   },
   [BADGE_NAMES.HELPFUL_CONTRIBUTOR]: {
-    description: "Received 5 upvotes on your replies",
+    description: "Received 5 upvotes on replies",
     rank: 4,
     icon: "ThumbsUp",
   },
@@ -90,7 +90,7 @@ export const BADGE_METADATA: Record<string, BadgeMetadata> = {
     icon: "CheckCircle",
   },
   [BADGE_NAMES.TRUSTED_HELPER]: {
-    description: "Received 15 upvotes on your replies",
+    description: "Received 15 upvotes on replies",
     rank: 6,
     icon: "ShieldCheck",
   },
