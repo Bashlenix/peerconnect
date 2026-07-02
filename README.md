@@ -267,17 +267,17 @@ These accounts give you a realistic multi-user feed with posts and replies sprea
 - Users can edit their own profile (name, study programme, semester, languages).
 
 ### Badge System
-Badges are awarded automatically based on activity thresholds:
+Badges are awarded automatically based on activity thresholds. All thresholds and descriptions live in `badge-config.ts`; the engine reads from that config and has no hardcoded values.
 
-| Badge | Trigger |
-|---|---|
-| First Reply | Post your first reply |
-| Getting Started | Reach a reply count threshold |
-| Active Helper | Reach a higher reply count |
-| Community Builder | Reach an even higher reply count |
-| Helpful Contributor | Receive a cumulative upvote threshold |
-| Trusted Helper | Receive a higher upvote threshold |
-| Solution Provider | Have a reply marked as accepted solution |
+| Badge | Trigger | Threshold |
+|---|---|---|
+| First Reply | Post your first reply | 1 reply |
+| Getting Started | Post more replies | 3 replies |
+| Active Helper | Post even more replies | 10 replies |
+| Community Builder | Post in Social or Sport categories | 10 replies in Social/Sport |
+| Helpful Contributor | Receive upvotes on your replies | 5 upvotes |
+| Trusted Helper | Receive more upvotes | 15 upvotes |
+| Solution Provider | Have replies marked as accepted solution | 5 accepted solutions |
 
 Each badge is awarded once and never re-awarded.
 
@@ -432,7 +432,8 @@ PeerConnect/
 │   │   │   ├── modules/             # Domain logic extracted from routes
 │   │   │   │   ├── ai-retrieval.ts        # FTS retrieval for AI Ask Bot (top-N posts + accepted solutions)
 │   │   │   │   ├── ai-answer.ts           # GPT-4.1-nano synthesis — strict source-only prompt
-│   │   │   │   ├── badge-engine.ts        # Badge award logic (atomic, threshold-based)
+│   │   │   │   ├── badge-config.ts        # BADGE_RULES — all badge names, thresholds, events (single source of truth)
+│   │   │   │   ├── badge-engine.ts        # Badge award logic — data-driven loop over BADGE_RULES (atomic)
 │   │   │   │   ├── domain-validator.ts    # University email domain checks
 │   │   │   │   ├── email-verification-service.ts
 │   │   │   │   ├── feed-query.ts          # Composable Prisma filters for the post feed
