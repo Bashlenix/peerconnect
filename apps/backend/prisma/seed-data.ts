@@ -1,5 +1,5 @@
 import { PrismaClient } from "../src/generated/prisma/client.js";
-import { BADGE_RULES } from "../src/modules/badge-rules.js";
+import { BADGE_METADATA } from "@peerconnect/shared";
 
 export const UNIVERSITIES = [
   { name: "TU Dortmund University", domain: "uni-dortmund.de" },
@@ -15,7 +15,10 @@ export const UNIVERSITIES = [
   { name: "Technische Hochschule Deggendorf", domain: "stud.th-deg.de" },
 ];
 
-export const BADGES = BADGE_RULES.map(({ name, description }) => ({ name, description }));
+export const BADGES = Object.entries(BADGE_METADATA).map(([name, meta]) => ({
+  name,
+  description: meta.description,
+}));
 
 export async function seedReferenceData(prisma: PrismaClient): Promise<void> {
   await Promise.all([
