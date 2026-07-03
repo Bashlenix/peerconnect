@@ -5,6 +5,8 @@ import fastifyCors from "@fastify/cors";
 import fastifyCookie from "@fastify/cookie";
 import fastifyJwt from "@fastify/jwt";
 import type { FastifyRequest, FastifyReply } from "fastify";
+import type { ServiceErrorResponse } from "@peerconnect/shared";
+import { isDatabaseUnavailableError } from "./modules/db-errors.js";
 import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
 import { postsRoute } from "./routes/posts.js";
@@ -48,6 +50,23 @@ export async function buildApp() {
     } catch {
       reply.status(401).send({ message: "Unauthorized" });
     }
+  });
+
+  // Turn transient "can't reach the database" failures into a clean 503 with a
+  // stable code so clients can show a friendly retry message instead of an
+  // opaque Prisma stack trace. Everything else falls through to Fastify's
+  // default error handling (preserving validation 400s, explicit statuses, etc).
+  app.setErrorHandler((error, request, reply) => {
+    if (isDatabaseUnavailableError(error)) {
+      request.log.error(error, "database unavailable");
+      const body: ServiceErrorResponse = {
+        code: "service_unavailable",
+        message:
+          "PeerConnect is temporarily unavailable while the database starts up. Please try again in a moment.",
+      };
+      return reply.status(503).send(body);
+    }
+    return reply.send(error);
   });
 
   await app.register(fastifySwagger, {

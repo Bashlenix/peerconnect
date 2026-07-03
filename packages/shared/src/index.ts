@@ -23,6 +23,16 @@ export interface AiErrorResponse {
   message: string;
 }
 
+// Returned (HTTP 503) when the backend cannot reach its database — e.g. the
+// dev DB container is still starting after a Codespace resume. Clients branch
+// on `code` rather than matching the human-readable `message`.
+export type ServiceErrorCode = "service_unavailable";
+
+export interface ServiceErrorResponse {
+  code: ServiceErrorCode;
+  message: string;
+}
+
 export interface AiAskRequest {
   query: string;
   source?: "inline" | "ask";

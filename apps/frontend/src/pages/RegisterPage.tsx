@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { register } from "@/api/auth";
+import { register, authErrorMessage } from "@/api/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,7 +61,7 @@ export default function RegisterPage() {
               />
             </div>
             {mutation.isError && (
-              <p className="text-sm text-red-600">{mutation.error.message}</p>
+              <p className="text-sm text-red-600">{authErrorMessage(mutation.error)}</p>
             )}
             <Button type="submit" className="w-full" disabled={mutation.isPending}>
               {mutation.isPending ? "Creating account…" : "Create account"}

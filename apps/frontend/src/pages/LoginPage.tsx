@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link, Navigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { login } from "@/api/auth";
+import { login, authErrorMessage } from "@/api/auth";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +74,7 @@ export default function LoginPage() {
               />
             </div>
             {mutation.isError && (
-              <p className="text-sm text-red-600">{mutation.error.message}</p>
+              <p className="text-sm text-red-600">{authErrorMessage(mutation.error)}</p>
             )}
             <Button type="submit" className="w-full" disabled={mutation.isPending}>
               {mutation.isPending ? "Signing in…" : "Sign in"}
