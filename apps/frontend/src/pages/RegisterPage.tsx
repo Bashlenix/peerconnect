@@ -13,9 +13,27 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [studyProgramme, setStudyProgramme] = useState("");
+  const [semester, setSemester] = useState("");
+  const [languagesRaw, setLanguagesRaw] = useState("");
 
   const mutation = useMutation({
-    mutationFn: () => register({ email, password, firstName, lastName }),
+    mutationFn: () => {
+      const languages = languagesRaw
+        .split(",")
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      return register({
+        email,
+        password,
+        firstName,
+        lastName,
+        studyProgramme: studyProgramme || undefined,
+        semester: semester ? parseInt(semester, 10) : undefined,
+        languages: languages.length > 0 ? languages : undefined,
+      });
+    },
     onSuccess: () => {
       navigate("/check-email", { state: { email } });
     },
@@ -83,6 +101,38 @@ export default function RegisterPage() {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={mutation.isPending}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="studyProgramme">Study programme (optional)</Label>
+              <Input
+                id="studyProgramme"
+                value={studyProgramme}
+                onChange={(e) => setStudyProgramme(e.target.value)}
+                placeholder="e.g. Computer Science"
+                disabled={mutation.isPending}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="semester">Semester (optional)</Label>
+              <Input
+                id="semester"
+                type="number"
+                min={1}
+                value={semester}
+                onChange={(e) => setSemester(e.target.value)}
+                placeholder="e.g. 3"
+                disabled={mutation.isPending}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="languages">Languages (optional, comma-separated)</Label>
+              <Input
+                id="languages"
+                value={languagesRaw}
+                onChange={(e) => setLanguagesRaw(e.target.value)}
+                placeholder="e.g. English, German"
                 disabled={mutation.isPending}
               />
             </div>

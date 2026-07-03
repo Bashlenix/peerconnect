@@ -20,12 +20,18 @@ export type LoginResult =
   | { ok: true; refreshToken: string; user: { id: string; email: string; firstName: string | null; lastName: string | null } }
   | { ok: false; reason: "not_found" | "wrong_password" | "not_verified" };
 
-export async function register(
-  email: string,
-  password: string,
-  firstName: string,
-  lastName: string
-): Promise<RegisterResult> {
+export interface RegisterInput {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  studyProgramme?: string;
+  semester?: number;
+  languages?: string[];
+}
+
+export async function register(input: RegisterInput): Promise<RegisterResult> {
+  const { email, password, firstName, lastName, studyProgramme, semester, languages } = input;
   const normalised = email.toLowerCase().trim();
 
   const existing = await prisma.user.findUnique({ where: { email: normalised }, select: { id: true } });
@@ -41,6 +47,9 @@ export async function register(
       passwordHash,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      ...(studyProgramme !== undefined && { studyProgramme }),
+      ...(semester !== undefined && { semester }),
+      ...(languages !== undefined && { languages }),
       universityId: domainResult.university.id,
       subscription: { create: {} },
     },

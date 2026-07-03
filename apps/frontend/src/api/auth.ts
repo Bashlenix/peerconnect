@@ -58,6 +58,9 @@ export interface RegisterInput {
   password: string;
   firstName: string;
   lastName: string;
+  studyProgramme?: string;
+  semester?: number;
+  languages?: string[];
 }
 
 export async function register(input: RegisterInput): Promise<RegisterResponse> {

@@ -88,6 +88,49 @@ describe("POST /auth/register", () => {
     expect(user).toBeNull();
   });
 
+  it("persists optional studyProgramme, semester, and languages when provided", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        email: "academic@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Dana",
+        lastName: "Iyer",
+        studyProgramme: "Computer Science",
+        semester: 4,
+        languages: ["English", "German"],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+
+    const user = await prisma.user.findUnique({ where: { email: "academic@tu-berlin.de" } });
+    expect(user!.studyProgramme).toBe("Computer Science");
+    expect(user!.semester).toBe(4);
+    expect(user!.languages).toEqual(["English", "German"]);
+  });
+
+  it("registers successfully without studyProgramme, semester, or languages", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        email: "no-academic@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Eve",
+        lastName: "Klein",
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+
+    const user = await prisma.user.findUnique({ where: { email: "no-academic@tu-berlin.de" } });
+    expect(user!.studyProgramme).toBeNull();
+    expect(user!.semester).toBeNull();
+    expect(user!.languages).toEqual([]);
+  });
+
   it("creates a free subscription for the registered user", async () => {
     await app.inject({
       method: "POST",

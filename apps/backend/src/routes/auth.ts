@@ -10,6 +10,9 @@ interface RegisterBody {
   password: string;
   firstName: string;
   lastName: string;
+  studyProgramme?: string;
+  semester?: number;
+  languages?: string[];
 }
 
 interface LoginBody {
@@ -38,6 +41,9 @@ export async function authRoute(app: FastifyInstance) {
             password: { type: "string", minLength: 8 },
             firstName: { type: "string", minLength: 1 },
             lastName: { type: "string", minLength: 1 },
+            studyProgramme: { type: "string" },
+            semester: { type: "integer", minimum: 1 },
+            languages: { type: "array", items: { type: "string" } },
           },
         },
         response: {
@@ -62,8 +68,7 @@ export async function authRoute(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { email, password, firstName, lastName } = request.body;
-      const result = await register(email, password, firstName, lastName);
+      const result = await register(request.body);
 
       if (!result.ok) {
         if (result.reason === "email_taken") return reply.status(409).send({ message: "Email already registered" });
