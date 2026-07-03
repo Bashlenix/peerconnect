@@ -24,7 +24,7 @@ Every new post makes the AI more useful. Every answer the AI surfaces reduces du
 - **Real-time notifications** — Server-Sent Events deliver replies, upvotes, and solution alerts instantly
 - **Full-text search** — PostgreSQL tsvector search with relevance ranking across all posts
 - **Badge & reputation system** — Activity-based badges reward consistent contributors
-- **Subscription tier** — Premium accounts remove ads; self-service mock upgrade/downgrade from the settings page (demo only, no payment)
+- **Subscription tier** — Premium accounts remove ads; choose a plan at sign-up or self-service mock upgrade/downgrade from the settings page (demo only, no payment)
 
 ---
 
@@ -229,7 +229,7 @@ These accounts give you a realistic multi-user feed with posts and replies sprea
 ## Features & Expected Behaviour
 
 ### Authentication
-- **Registration** — Email must belong to a recognised German university domain. A verification email is sent before the account is active. (Requires SMTP setup; not available in local dev without it.)
+- **Registration** — Email must belong to a recognised German university domain. First and last name are required; study programme, semester, languages, and an initial Free/Premium plan choice (mock, no payment) are optional and can be filled in later via Settings if skipped. A verification email is sent before the account is active. (Requires SMTP setup; not available in local dev without it.)
 - **Login / Logout** — Sessions use short-lived JWTs (15 min) stored in httpOnly cookies, backed by a refresh token stored as a hash in the database.
 - **Session persistence** — On page load the app silently refreshes the session via the refresh token; users stay logged in across browser restarts.
 
@@ -505,7 +505,7 @@ To add a new feature: create a route file in `src/routes/`, register it in `app.
 
 ## Known Limitations
 
-- **Premium tier upgrade/downgrade is mock only.** The profile/settings page lets any account toggle between Free and Premium instantly, but there is no real payment processing or checkout UI behind it — it's a self-service demo toggle. The pre-seeded premium accounts remain available too.
+- **Premium tier selection is mock only.** Both the sign-up form's Free/Premium toggle and the profile/settings page's upgrade/downgrade button let any account switch tiers instantly, but there is no real payment processing or checkout UI behind either — they're self-service demo toggles. The pre-seeded premium accounts remain available too.
 - **SSE notifications are single-process only.** The SSE manager holds open connections in memory. This works correctly for local development but would not work across multiple server instances in production (would require a Redis pub/sub layer).
 - **Registration is restricted to known university domains.** Any email address whose domain is not in the seeded university list is rejected outright at registration with a 422 error. Adding a new university requires updating the seed data and rerunning migrations — there is no admin UI for this.
 - **Text only.** Posts and replies are plain text. File and image uploads are not supported.
