@@ -4,7 +4,7 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {"moby": false}
   },
-  "postCreateCommand": "npm ci && cd apps/backend && npx prisma generate && docker build -f docker/db/Dockerfile -t peerconnect-db . && docker run -d -p 5432:5432 --name peerconnect-db peerconnect-db",
-  "postStartCommand": "docker start peerconnect-db 2>/dev/null || (docker build -f docker/db/Dockerfile -t peerconnect-db . && docker run -d -p 5432:5432 --name peerconnect-db peerconnect-db)",
+  "postCreateCommand": "npm ci && (cd apps/backend && npx prisma generate) && bash .devcontainer/db-up.sh",
+  "postStartCommand": "bash .devcontainer/db-up.sh",
   "forwardPorts": [3000, 3001, 5432]
 }
