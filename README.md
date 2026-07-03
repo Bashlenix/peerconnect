@@ -106,14 +106,27 @@ npm ci
 
 #### Option A: Docker (recommended)
 
+> **Using GitHub Codespaces?** You can skip this step. The devcontainer builds,
+> starts, and (via `--restart unless-stopped`) automatically brings the database
+> back up on every Codespace resume — see `.devcontainer/db-up.sh`. The steps
+> below are for **local, non-Codespace** setup.
+
 Build the pre-seeded database image and start it. This single command gives you a fully migrated PostgreSQL 16 instance with all test data already loaded.
 
 ```bash
 docker build -f docker/db/Dockerfile -t peerconnect-db .
-docker run -d -p 5432:5432 --name peerconnect-db peerconnect-db
+docker run -d -p 5432:5432 --restart unless-stopped --name peerconnect-db peerconnect-db
 ```
 
-The database is immediately ready at `postgresql://postgres:postgres@localhost:5432/peerconnect`.
+The `--restart unless-stopped` flag means Docker automatically restarts the
+container after a machine or Docker daemon restart, so you won't need to start
+it again by hand. The database is immediately ready at
+`postgresql://postgres:postgres@localhost:5432/peerconnect`.
+
+If the container already exists (e.g. after a reboot) just start it again:
+```bash
+docker start peerconnect-db
+```
 
 To stop and remove the container:
 ```bash
