@@ -28,10 +28,11 @@ export interface RegisterInput {
   studyProgramme?: string;
   semester?: number;
   languages?: string[];
+  subscriptionStatus?: "free" | "premium";
 }
 
 export async function register(input: RegisterInput): Promise<RegisterResult> {
-  const { email, password, firstName, lastName, studyProgramme, semester, languages } = input;
+  const { email, password, firstName, lastName, studyProgramme, semester, languages, subscriptionStatus } = input;
   const normalised = email.toLowerCase().trim();
 
   const existing = await prisma.user.findUnique({ where: { email: normalised }, select: { id: true } });
@@ -51,7 +52,7 @@ export async function register(input: RegisterInput): Promise<RegisterResult> {
       ...(semester !== undefined && { semester }),
       ...(languages !== undefined && { languages }),
       universityId: domainResult.university.id,
-      subscription: { create: {} },
+      subscription: { create: { ...(subscriptionStatus !== undefined && { status: subscriptionStatus }) } },
     },
     select: { id: true },
   });

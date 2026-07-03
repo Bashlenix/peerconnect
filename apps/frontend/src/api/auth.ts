@@ -61,6 +61,7 @@ export interface RegisterInput {
   studyProgramme?: string;
   semester?: number;
   languages?: string[];
+  subscriptionStatus?: "free" | "premium";
 }
 
 export async function register(input: RegisterInput): Promise<RegisterResponse> {

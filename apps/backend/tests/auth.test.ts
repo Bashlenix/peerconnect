@@ -155,6 +155,49 @@ describe("POST /auth/register", () => {
     expect(subscription!.endDate).toBeNull();
   });
 
+  it("creates a premium subscription when subscriptionStatus is requested", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        email: "premium-test@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Premium",
+        lastName: "Test",
+        subscriptionStatus: "premium",
+      },
+    });
+
+    const user = await prisma.user.findUnique({
+      where: { email: "premium-test@tu-berlin.de" },
+    });
+    const subscription = await prisma.subscription.findUnique({
+      where: { userId: user!.id },
+    });
+
+    expect(subscription).not.toBeNull();
+    expect(subscription!.status).toBe("premium");
+  });
+
+  it("returns 400 for an invalid subscriptionStatus value", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: {
+        email: "bad-sub@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Bad",
+        lastName: "Sub",
+        subscriptionStatus: "gold",
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+
+    const user = await prisma.user.findUnique({ where: { email: "bad-sub@tu-berlin.de" } });
+    expect(user).toBeNull();
+  });
+
   it("returns 422 and creates no user for an unknown domain", async () => {
     const res = await app.inject({
       method: "POST",

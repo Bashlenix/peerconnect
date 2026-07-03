@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const [studyProgramme, setStudyProgramme] = useState("");
   const [semester, setSemester] = useState("");
   const [languagesRaw, setLanguagesRaw] = useState("");
+  const [subscriptionStatus, setSubscriptionStatus] = useState<"free" | "premium">("free");
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -32,6 +33,7 @@ export default function RegisterPage() {
         studyProgramme: studyProgramme || undefined,
         semester: semester ? parseInt(semester, 10) : undefined,
         languages: languages.length > 0 ? languages : undefined,
+        subscriptionStatus,
       });
     },
     onSuccess: () => {
@@ -135,6 +137,30 @@ export default function RegisterPage() {
                 placeholder="e.g. English, German"
                 disabled={mutation.isPending}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Plan</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={subscriptionStatus === "free" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setSubscriptionStatus("free")}
+                  disabled={mutation.isPending}
+                >
+                  Free
+                </Button>
+                <Button
+                  type="button"
+                  variant={subscriptionStatus === "premium" ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setSubscriptionStatus("premium")}
+                  disabled={mutation.isPending}
+                >
+                  Premium
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400">Demo only — no payment is processed.</p>
             </div>
             {mutation.isError && (
               <p className="text-sm text-red-600">{authErrorMessage(mutation.error)}</p>

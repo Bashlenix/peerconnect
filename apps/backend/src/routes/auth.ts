@@ -13,6 +13,7 @@ interface RegisterBody {
   studyProgramme?: string;
   semester?: number;
   languages?: string[];
+  subscriptionStatus?: "free" | "premium";
 }
 
 interface LoginBody {
@@ -44,6 +45,7 @@ export async function authRoute(app: FastifyInstance) {
             studyProgramme: { type: "string" },
             semester: { type: "integer", minimum: 1 },
             languages: { type: "array", items: { type: "string" } },
+            subscriptionStatus: { type: "string", enum: ["free", "premium"] },
           },
         },
         response: {
