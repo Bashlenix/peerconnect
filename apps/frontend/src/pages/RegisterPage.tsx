@@ -11,9 +11,11 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
 
   const mutation = useMutation({
-    mutationFn: () => register(email, password),
+    mutationFn: () => register({ email, password, firstName, lastName }),
     onSuccess: () => {
       navigate("/check-email", { state: { email } });
     },
@@ -35,6 +37,30 @@ export default function RegisterPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="firstName">First name</Label>
+                <Input
+                  id="firstName"
+                  placeholder="Your first name"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  disabled={mutation.isPending}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lastName">Last name</Label>
+                <Input
+                  id="lastName"
+                  placeholder="Your last name"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  disabled={mutation.isPending}
+                />
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">University email</Label>
               <Input

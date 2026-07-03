@@ -41,7 +41,7 @@ async function registerVerifyAndLogin(email: string, password = "securePass1") {
   await app.inject({
     method: "POST",
     url: "/auth/register",
-    payload: { email, password },
+    payload: { email, password, firstName: "Test", lastName: "User" },
   });
   const user = await prisma.user.findUnique({ where: { email } });
   await prisma.user.update({

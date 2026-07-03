@@ -50,7 +50,12 @@ describe("database unavailable → 503 service_unavailable", () => {
     const res = await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "user@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "user@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Test",
+        lastName: "User",
+      },
     });
 
     expect(res.statusCode).toBe(503);

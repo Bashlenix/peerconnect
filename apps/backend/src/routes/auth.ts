@@ -8,6 +8,8 @@ const ACCESS_TOKEN_TTL = "15m";
 interface RegisterBody {
   email: string;
   password: string;
+  firstName: string;
+  lastName: string;
 }
 
 interface LoginBody {
@@ -30,10 +32,12 @@ export async function authRoute(app: FastifyInstance) {
         summary: "Register a new student account",
         body: {
           type: "object",
-          required: ["email", "password"],
+          required: ["email", "password", "firstName", "lastName"],
           properties: {
             email: { type: "string", format: "email" },
             password: { type: "string", minLength: 8 },
+            firstName: { type: "string", minLength: 1 },
+            lastName: { type: "string", minLength: 1 },
           },
         },
         response: {
@@ -58,8 +62,8 @@ export async function authRoute(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { email, password } = request.body;
-      const result = await register(email, password);
+      const { email, password, firstName, lastName } = request.body;
+      const result = await register(email, password, firstName, lastName);
 
       if (!result.ok) {
         if (result.reason === "email_taken") return reply.status(409).send({ message: "Email already registered" });

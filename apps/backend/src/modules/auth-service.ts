@@ -20,7 +20,12 @@ export type LoginResult =
   | { ok: true; refreshToken: string; user: { id: string; email: string; firstName: string | null; lastName: string | null } }
   | { ok: false; reason: "not_found" | "wrong_password" | "not_verified" };
 
-export async function register(email: string, password: string): Promise<RegisterResult> {
+export async function register(
+  email: string,
+  password: string,
+  firstName: string,
+  lastName: string
+): Promise<RegisterResult> {
   const normalised = email.toLowerCase().trim();
 
   const existing = await prisma.user.findUnique({ where: { email: normalised }, select: { id: true } });
@@ -31,7 +36,14 @@ export async function register(email: string, password: string): Promise<Registe
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const user = await prisma.user.create({
-    data: { email: normalised, passwordHash, universityId: domainResult.university.id, subscription: { create: {} } },
+    data: {
+      email: normalised,
+      passwordHash,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      universityId: domainResult.university.id,
+      subscription: { create: {} },
+    },
     select: { id: true },
   });
 

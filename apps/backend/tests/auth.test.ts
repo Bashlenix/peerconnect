@@ -45,7 +45,12 @@ describe("POST /auth/register", () => {
     const res = await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "alice@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "alice@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Alice",
+        lastName: "Weber",
+      },
     });
 
     expect(res.statusCode).toBe(201);
@@ -60,13 +65,39 @@ describe("POST /auth/register", () => {
     expect(user!.isVerified).toBe(false);
     expect(user!.universityId).not.toBeNull();
     expect(user!.emailVerificationToken).not.toBeNull();
+    expect(user!.firstName).toBe("Alice");
+    expect(user!.lastName).toBe("Weber");
+  });
+
+  it("returns 400 when firstName or lastName is missing", async () => {
+    const missingFirstName = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "noname@tu-berlin.de", password: "securePass1", lastName: "Weber" },
+    });
+    expect(missingFirstName.statusCode).toBe(400);
+
+    const missingLastName = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email: "noname@tu-berlin.de", password: "securePass1", firstName: "Alice" },
+    });
+    expect(missingLastName.statusCode).toBe(400);
+
+    const user = await prisma.user.findUnique({ where: { email: "noname@tu-berlin.de" } });
+    expect(user).toBeNull();
   });
 
   it("creates a free subscription for the registered user", async () => {
     await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "sub-test@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "sub-test@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Sub",
+        lastName: "Test",
+      },
     });
 
     const user = await prisma.user.findUnique({
@@ -85,7 +116,12 @@ describe("POST /auth/register", () => {
     const res = await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "bob@unknown-uni.de", password: "securePass1" },
+      payload: {
+        email: "bob@unknown-uni.de",
+        password: "securePass1",
+        firstName: "Bob",
+        lastName: "Nobody",
+      },
     });
 
     expect(res.statusCode).toBe(422);
@@ -101,13 +137,23 @@ describe("POST /auth/register", () => {
     await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "dup@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "dup@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Dup",
+        lastName: "User",
+      },
     });
 
     const res = await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "dup@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "dup@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Dup",
+        lastName: "User",
+      },
     });
 
     expect(res.statusCode).toBe(409);
@@ -118,7 +164,7 @@ describe("POST /auth/register", () => {
     const res = await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "test@tu-berlin.de" },
+      payload: { email: "test@tu-berlin.de", firstName: "Test", lastName: "User" },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -127,7 +173,12 @@ describe("POST /auth/register", () => {
     const res = await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "test@tu-berlin.de", password: "short" },
+      payload: {
+        email: "test@tu-berlin.de",
+        password: "short",
+        firstName: "Test",
+        lastName: "User",
+      },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -141,7 +192,12 @@ describe("GET /auth/verify-email", () => {
     await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "carol@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "carol@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Carol",
+        lastName: "Nguyen",
+      },
     });
 
     const user = await prisma.user.findUnique({
@@ -212,7 +268,7 @@ describe("POST /auth/login", () => {
     await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email, password },
+      payload: { email, password, firstName: "Test", lastName: "User" },
     });
     const user = await prisma.user.findUnique({ where: { email } });
     await prisma.user.update({
@@ -267,7 +323,12 @@ describe("POST /auth/login", () => {
     await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "unverified@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "unverified@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Unverified",
+        lastName: "User",
+      },
     });
 
     const res = await app.inject({
@@ -298,7 +359,7 @@ describe("GET /auth/me", () => {
     await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email, password },
+      payload: { email, password, firstName: "Test", lastName: "User" },
     });
     const user = await prisma.user.findUnique({ where: { email } });
     await prisma.user.update({
@@ -377,7 +438,12 @@ describe("POST /auth/logout", () => {
     await app.inject({
       method: "POST",
       url: "/auth/register",
-      payload: { email: "logout@tu-berlin.de", password: "securePass1" },
+      payload: {
+        email: "logout@tu-berlin.de",
+        password: "securePass1",
+        firstName: "Logout",
+        lastName: "User",
+      },
     });
     const user = await prisma.user.findUnique({ where: { email: "logout@tu-berlin.de" } });
     await prisma.user.update({

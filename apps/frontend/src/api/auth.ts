@@ -53,12 +53,19 @@ export interface MeResponse {
   user: AuthUser;
 }
 
-export async function register(email: string, password: string): Promise<RegisterResponse> {
+export interface RegisterInput {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
+export async function register(input: RegisterInput): Promise<RegisterResponse> {
   const res = await fetch(`${BASE}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(input),
   });
 
   const data = (await res.json()) as RegisterResponse & {

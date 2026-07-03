@@ -71,7 +71,11 @@ afterEach(async () => {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function registerVerifyAndLogin(email: string, password = "securePass1") {
-  await app.inject({ method: "POST", url: "/auth/register", payload: { email, password } });
+  await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: { email, password, firstName: "Test", lastName: "User" },
+  });
   const user = await prisma.user.findUnique({ where: { email } });
   await prisma.user.update({
     where: { id: user!.id },
