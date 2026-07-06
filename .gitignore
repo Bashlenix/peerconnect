@@ -172,3 +172,7 @@ dist/
 .claude/
 ralph/
 commit.md
+
+# Local agent skills & AI planning/issue docs — kept locally, not tracked in git
+.agents/skills/
+.ai/
