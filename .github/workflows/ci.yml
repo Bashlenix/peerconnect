@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: peerconnect_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/peerconnect_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/peerconnect_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+
+      - name: Generate Prisma client
+        working-directory: apps/backend
+        run: npx prisma generate
+
+      # Prisma generates spurious SQL for the search_vector Unsupported("tsvector")
+      # column (see CLAUDE.md). The local pre-commit hook (.githooks/pre-commit)
+      # guards staged files; this mirrors that check in CI for anyone who committed
+      # without hook setup. Matches the exact known-bad lines, not every mention of
+      # search_vector, since legitimate migrations (initial column, GIN index) do
+      # reference it.
+      - name: Guard against spurious search_vector migration SQL
+        run: |
+          if grep -rlE 'ALTER TABLE "posts" ALTER COLUMN "search_vector" DROP DEFAULT;|^DROP INDEX "posts_search_vector_idx";$' apps/backend/prisma/migrations/*/migration.sql 2>/dev/null; then
+            echo "::error::Migration file above contains spurious search_vector SQL — see CLAUDE.md for the fix."
+            exit 1
+          fi
+
+      - name: Run database migrations
+        working-directory: apps/backend
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test

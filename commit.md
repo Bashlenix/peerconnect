@@ -608,3 +608,52 @@ Blockers / notes for next iteration:
   was manually exercised via curl.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+feat(#60): add GitHub Actions CI pipeline
+
+Key decisions (from the grill-me/to-issues design session, GitHub #66):
+- Triggers on every push (all branches) plus PRs targeting main - fast
+  feedback on branches, not just once a PR opens.
+- postgres:16 service container (peerconnect_test, pg_isready health check)
+  rather than building the seeded docker/db/Dockerfile image - the test
+  suite creates its own fixtures, so the baked-in seed data would be dead
+  weight and real build time for nothing.
+- Corrected mid-implementation: the migration guard matches the two exact
+  spurious lines named in CLAUDE.md (DROP INDEX "posts_search_vector_idx";
+  with no IF EXISTS, and ALTER TABLE "posts" ALTER COLUMN "search_vector"
+  DROP DEFAULT;), not a blanket grep for any "search_vector" mention. A
+  blanket match would have false-positived on this repo's own history -
+  three existing legitimate migrations (init, post_implementation,
+  restore_search_vector_gin_index) already reference that column/index.
+  Verified both directions: no match against real history, confirmed match
+  against a scratch file with the exact spurious pattern.
+- packages/shared is built before anything backend-related, mirroring the
+  root dev script and docker/db/Dockerfile - backend's package.json
+  resolves @peerconnect/shared only via its built dist/, for both runtime
+  imports and tsc's module resolution during typecheck.
+
+Files changed:
+- .github/workflows/ci.yml: new - checkout, setup-node (22, npm cache),
+  npm ci, build shared, prisma generate, migration guard, prisma migrate
+  deploy, typecheck, build, test.
+- .ai/issues/done/60-ci-pipeline.md: issue moved to done.
+
+Verified locally (no push/PR opened this session, so the workflow hasn't
+run on GitHub's own infrastructure yet): started a fresh postgres:16
+Docker container matching the CI service config exactly, ran every job
+step against it in order - all 9 migrations applied cleanly from empty,
+typecheck/build clean, full suite green (270/270) against the freshly
+migrated container. Directly confirmed the "catches a deliberately broken
+build" criterion by temporarily introducing a type error, confirming tsc
+failed with TS2322, then reverting it.
+
+Blockers/notes for next iteration:
+- The workflow itself has only been simulated locally via Docker, not run
+  on an actual GitHub-hosted runner - that needs a push or PR, which this
+  session didn't do (no push without being asked).
+- #61 (general rate limiting) is the last issue from this design session,
+  unblocked and ready to start.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
