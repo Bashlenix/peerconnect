@@ -88,19 +88,28 @@ Make sure you have the following installed before starting:
 
 Opening this repo in a Codespace needs no manual setup at all — by the time
 it finishes creating (or resuming), dependencies are installed, git hooks
-are active, the database is seeded and running, `apps/backend/.env` is
-generated, and both dev servers are already running in the background. Skip
-straight to the forwarded ports:
+are active, the database is seeded and running, and `apps/backend/.env` is
+generated. The dev servers then start automatically in a dedicated **"Start
+dev servers"** terminal, and once the frontend is up a preview of it opens on
+its own. (The first time, VS Code may ask you to **"Allow Automatic Tasks"** —
+approve it so the servers can auto-start.)
 
-| Service | Port |
-|---|---|
-| Frontend | 5173 |
-| Backend API | 3001 |
-| API Docs (Swagger) | 3001 (`/docs`) |
+Open the app on the **frontend** port — not the database port:
+
+| Service | Port | Open in browser? |
+|---|---|---|
+| **Frontend (the app)** | **5173** | ✅ yes |
+| Backend API | 3001 | only `/docs` (Swagger) |
+| PostgreSQL | 5432 | ❌ no — not a web server |
+
+Use the **Ports** tab and click the globe icon on **5173** (a
+`…-5173.app.github.dev` URL). Port 5432 speaks the Postgres protocol, not
+HTTP, so a browser can't render it.
 
 This is driven by `.devcontainer/devcontainer.json`,
-`.devcontainer/setup-env.sh`, and `.devcontainer/db-up.sh`. Dev server output
-is logged to `/tmp/peerconnect-dev.log` — `tail -f` it if something looks off.
+`.devcontainer/setup-env.sh`, `.devcontainer/db-up.sh`, and the folder-open
+task in `.vscode/tasks.json`. Dev server logs are visible right in that task's
+terminal; to restart the stack, re-run the task or run `npm run dev` yourself.
 
 **Email verification and the AI Ask Bot need real secrets.**
 `apps/backend/.env.example` only has placeholder values for `SMTP_PASS` and
