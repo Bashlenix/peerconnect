@@ -84,6 +84,42 @@ Make sure you have the following installed before starting:
 
 ## Getting Started
 
+### GitHub Codespaces (fully automatic)
+
+Opening this repo in a Codespace needs no manual setup at all — by the time
+it finishes creating (or resuming), dependencies are installed, git hooks
+are active, the database is seeded and running, `apps/backend/.env` is
+generated, and both dev servers are already running in the background. Skip
+straight to the forwarded ports:
+
+| Service | Port |
+|---|---|
+| Frontend | 5173 |
+| Backend API | 3001 |
+| API Docs (Swagger) | 3001 (`/docs`) |
+
+This is driven by `.devcontainer/devcontainer.json`,
+`.devcontainer/setup-env.sh`, and `.devcontainer/db-up.sh`. Dev server output
+is logged to `/tmp/peerconnect-dev.log` — `tail -f` it if something looks off.
+
+**Email verification and the AI Ask Bot need real secrets.**
+`apps/backend/.env.example` only has placeholder values for `SMTP_PASS` and
+`OPENAI_API_KEY`, so the generated `.env` leaves both commented out rather
+than copying the placeholders verbatim — a placeholder string would cause a
+confusing real-API-call failure instead of failing cleanly. To enable either
+feature, add a [Codespaces secret](https://docs.github.com/en/codespaces/managing-your-codespaces/managing-secrets-for-your-codespace)
+named `SMTP_PASS` or `OPENAI_API_KEY` — GitHub injects it as a real
+environment variable before setup runs, and it takes precedence over the
+generated `.env` automatically. Without one, everything else works using the
+pre-seeded test accounts below.
+
+To regenerate `.env` (e.g. after adding a Codespaces secret), delete
+`apps/backend/.env` and rebuild the container, or run
+`bash .devcontainer/setup-env.sh` manually — it does nothing if `.env`
+already exists.
+
+The numbered steps below are for **local, non-Codespace** setup.
+
 ### 1. Clone the repository
 
 ```bash
@@ -108,11 +144,6 @@ npm ci
 ### 4. Start the database
 
 #### Option A: Docker (recommended)
-
-> **Using GitHub Codespaces?** You can skip this step. The devcontainer builds,
-> starts, and (via `--restart unless-stopped`) automatically brings the database
-> back up on every Codespace resume — see `.devcontainer/db-up.sh`. The steps
-> below are for **local, non-Codespace** setup.
 
 Build the pre-seeded database image and start it. This single command gives you a fully migrated PostgreSQL 16 instance with all test data already loaded.
 
