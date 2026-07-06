@@ -4,7 +4,7 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {"moby": false}
   },
-  "postCreateCommand": "npm ci && (cd apps/backend && npx prisma generate) && bash .devcontainer/db-up.sh",
+  "postCreateCommand": "npm ci && git config core.hooksPath .githooks && (cd apps/backend && npx prisma generate) && bash .devcontainer/db-up.sh",
   "postStartCommand": "bash .devcontainer/db-up.sh",
-  "forwardPorts": [3000, 3001, 5432]
+  "forwardPorts": [3001, 5173, 5432]
 }

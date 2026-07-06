@@ -722,3 +722,62 @@ Blockers/notes for next iteration:
   push.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+docs: document logging, rate limiting, and CI pipeline
+
+Note: this entry is a catch-up log for commit 018ba55, made in a prior
+session that missed writing to this file at the time.
+
+Covers the three infra additions from #59-#61: Pino structured logging and
+@fastify/rate-limit added to the Tech Stack table; a new Continuous
+Integration section describing the GitHub Actions pipeline; a
+rate-limiting note in both Authentication and API Documentation; and the
+Project Structure tree updated with .github/workflows/ci.yml, logger.ts,
+and the two new error-detection modules (db-errors.ts was already missing
+from the tree despite existing - added it alongside rate-limit-errors.ts
+for consistency).
+
+Files changed:
+- README.md: Table of Contents, Tech Stack, Authentication, API
+  Documentation, new Continuous Integration section, Project Structure
+  tree.
+
+Also pushed 3 commits (#59, #60, #61) plus this docs commit to origin/main
+in this session - first push of the grill-me/to-issues design-session work.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+chore(#62): fix devcontainer port forwarding, automate git hooks
+
+Key decisions (from a second grill-me/to-issues session scoping fully
+automatic Codespace startup - #62-#64):
+- forwardPorts [3000, 3001, 5432] -> [3001, 5173, 5432]: 3000 was unused
+  (backend is 3001, frontend is Vite's default 5173 per
+  apps/frontend/vite.config.ts), and 5173 was missing entirely.
+- git config core.hooksPath .githooks added to postCreateCommand - was a
+  manual README step, needed for the pre-commit search_vector guard.
+
+Files changed:
+- .devcontainer/devcontainer.json: both fixes above.
+- .ai/issues/done/62-devcontainer-ports-hooks.md: issue moved to done.
+
+Verified: JSON parses cleanly; ran git config core.hooksPath .githooks
+directly and confirmed git config --get core.hooksPath returns .githooks
+afterward. No automated test seam - this is a devcontainer config file
+with no runtime code path.
+
+Side finding worth flagging: this local checkout's core.hooksPath was
+actually unset before this (defaulting to .git/hooks) - the pre-commit
+search_vector guard hadn't been active locally at all until this change
+was verified. Running the verification step fixed that for this checkout
+too, which is the correct outcome, not a side effect to revert.
+
+Blockers/notes for next iteration:
+- #63 (auto-generate .env) and #64 (auto-start dev servers, blocked by
+  #63) are the remaining issues from this session.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
