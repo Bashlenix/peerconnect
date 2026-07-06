@@ -887,3 +887,24 @@ Blockers/notes for next iteration:
   matching how #59-61's README update was handled) is still outstanding.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+docs: document fully automatic Codespace startup
+
+Covers the #62-#64 batch: a new "GitHub Codespaces (fully automatic)"
+section at the top of Getting Started replaces the old per-step callout
+(previously only the DB step mentioned Codespaces) - now covers setup,
+.env generation, and dev-server auto-start in one place, plus how to
+enable email verification / the AI Ask Bot via Codespaces secrets and how
+to regenerate .env after adding one.
+
+Files changed:
+- README.md: new Getting Started subsection; removed the now-redundant
+  narrower callout under "4. Start the database".
+
+This closes out the untracked README follow-up noted in the #64 entry
+above. Ready to push: 4 local commits ahead of origin/main (#62, #63, #64,
+this docs commit).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
