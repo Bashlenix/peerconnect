@@ -47,6 +47,9 @@ export async function aiRoute(app: FastifyInstance) {
     "/ai/ask",
     {
       preHandler: app.authenticate,
+      // Excluded from the general rate limiter — already governed by its
+      // own per-user burst/daily quota in ai-usage.ts.
+      config: { rateLimit: false },
       schema: {
         tags: ["AI"],
         summary: "Ask the AI bot a question",
@@ -108,6 +111,9 @@ export async function aiRoute(app: FastifyInstance) {
     "/ai/usage",
     {
       onRequest: [app.authenticate],
+      // Same exclusion as /ai/ask above — no general-purpose quota needed
+      // on top of ai-usage.ts's own limits.
+      config: { rateLimit: false },
       schema: {
         tags: ["AI"],
         summary: "Get today's AI usage for the current user",

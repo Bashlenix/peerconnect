@@ -4,9 +4,11 @@ import fastifySwaggerUI from "@fastify/swagger-ui";
 import fastifyCors from "@fastify/cors";
 import fastifyCookie from "@fastify/cookie";
 import fastifyJwt from "@fastify/jwt";
+import fastifyRateLimit from "@fastify/rate-limit";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import type { ServiceErrorResponse } from "@peerconnect/shared";
 import { isDatabaseUnavailableError } from "./modules/db-errors.js";
+import { isRateLimitError } from "./modules/rate-limit-errors.js";
 import { logger } from "./logger.js";
 import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
@@ -30,8 +32,27 @@ declare module "fastify" {
   }
 }
 
-export async function buildApp() {
+export interface BuildAppOptions {
+  // Defaults to disabled under NODE_ENV=test so the existing test suite
+  // (many requests per app instance, built once in beforeAll) isn't rate
+  // limited by accident. tests/rate-limit.test.ts opts back in explicitly.
+  enableRateLimit?: boolean;
+}
+
+export async function buildApp(opts?: BuildAppOptions) {
   const app = Fastify({ loggerInstance: logger });
+
+  const enableRateLimit = opts?.enableRateLimit ?? process.env["NODE_ENV"] !== "test";
+  if (enableRateLimit) {
+    await app.register(fastifyRateLimit, {
+      max: 100,
+      timeWindow: "1 minute",
+      errorResponseBuilder: (): ServiceErrorResponse => ({
+        code: "rate_limited",
+        message: "Too many requests — please try again shortly.",
+      }),
+    });
+  }
 
   await app.register(fastifyCors, {
     origin: process.env["FRONTEND_URL"] ?? "http://localhost:5173",
@@ -66,6 +87,9 @@ export async function buildApp() {
           "PeerConnect is temporarily unavailable while the database starts up. Please try again in a moment.",
       };
       return reply.status(503).send(body);
+    }
+    if (isRateLimitError(error)) {
+      return reply.status(429).send(error as ServiceErrorResponse);
     }
     return reply.send(error);
   });

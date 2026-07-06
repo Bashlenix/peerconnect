@@ -657,3 +657,68 @@ Blockers/notes for next iteration:
   unblocked and ready to start.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+feat(#61): add general API rate limiting (@fastify/rate-limit)
+
+Key decisions (from the grill-me/to-issues design session, GitHub #67):
+- buildApp() gains an optional { enableRateLimit?: boolean } param,
+  defaulting to NODE_ENV !== "test" - keeps all pre-existing tests
+  unaffected (many requests per app instance, built once in beforeAll)
+  while letting one dedicated test opt back in explicitly rather than
+  mutating global process.env state.
+- Global default 100 req/min, /auth/login and /auth/register overridden to
+  5 req/min via per-route config.rateLimit (brute-force/signup-spam
+  surface); /ai/* excluded via config.rateLimit: false since it already has
+  its own more precise per-user burst/daily quota in ai-usage.ts.
+- ServiceErrorCode (packages/shared) widened to include "rate_limited" so
+  the 429 body matches the same { code, message } shape already used for
+  the 503 service_unavailable case.
+
+Bug found and fixed during implementation: @fastify/rate-limit doesn't call
+reply.send() on the exceeded path - it throws whatever errorResponseBuilder
+returns. That thrown plain object landed in this app's custom
+setErrorHandler, which only special-cased the DB-unavailable error and
+otherwise fell through to a bare reply.send(error) - since the thrown value
+isn't an Error instance, that produced a 500, not 429. Caught immediately
+by tests/rate-limit.test.ts (written red-first: the test never observed a
+429 in 105 attempts; root-caused by temporarily logging
+x-ratelimit-remaining per request, which showed the counter correctly
+hitting 0 right as the response flipped to 500). Fixed with a small new
+isRateLimitError guard mirroring db-errors.ts's existing pattern exactly,
+with its own red-first test file.
+
+Files changed:
+- packages/shared/src/index.ts: ServiceErrorCode -> "service_unavailable" |
+  "rate_limited".
+- apps/backend/src/app.ts: buildApp(opts) + global rate-limit registration
+  + isRateLimitError branch in setErrorHandler.
+- apps/backend/src/modules/rate-limit-errors.ts: new - isRateLimitError
+  guard.
+- apps/backend/src/routes/auth.ts: config.rateLimit override (5/min) on
+  register + login.
+- apps/backend/src/routes/ai.ts: config.rateLimit: false on both AI routes.
+- apps/backend/tests/rate-limit.test.ts: new, 3 tests.
+- apps/backend/tests/rate-limit-errors.test.ts: new, 4 tests.
+- apps/backend/package.json: +@fastify/rate-limit dependency.
+- .ai/issues/done/61-general-rate-limiting.md: issue moved to done.
+
+Verified against a real running dev server, not just the test suite: 6
+rapid POST /auth/login attempts - first 5 return 401 (wrong credentials),
+6th returns 429 with the exact {code, message} body and
+retry-after/x-ratelimit-* headers; POST /ai/ask stays 401 either way,
+confirming the exclusion. Full backend suite: 277/277 passing (270
+pre-existing + 7 new), 18/18 files. Typecheck and both workspace builds
+clean - required rebuilding packages/shared's dist after widening
+ServiceErrorCode, same dist-resolution constraint noted in #60.
+
+Blockers/notes for next iteration:
+- This was the last issue from the grill-me/to-issues session that started
+  with the dev-checklist evaluation report (logging #59, CI #60, rate
+  limiting #61 - all three now closed).
+- None of this has been verified against an actual GitHub Actions run yet
+  (#60's workflow hasn't been pushed) - worth doing together once ready to
+  push.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

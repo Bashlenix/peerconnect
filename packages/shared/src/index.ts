@@ -23,10 +23,12 @@ export interface AiErrorResponse {
   message: string;
 }
 
-// Returned (HTTP 503) when the backend cannot reach its database — e.g. the
-// dev DB container is still starting after a Codespace resume. Clients branch
-// on `code` rather than matching the human-readable `message`.
-export type ServiceErrorCode = "service_unavailable";
+// Generic service-level error codes clients branch on rather than matching
+// the human-readable `message`: "service_unavailable" (HTTP 503) when the
+// backend cannot reach its database — e.g. the dev DB container is still
+// starting after a Codespace resume — and "rate_limited" (HTTP 429) when a
+// client has exceeded a route's request quota.
+export type ServiceErrorCode = "service_unavailable" | "rate_limited";
 
 export interface ServiceErrorResponse {
   code: ServiceErrorCode;

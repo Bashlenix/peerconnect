@@ -31,6 +31,7 @@ export async function authRoute(app: FastifyInstance) {
   app.post<{ Body: RegisterBody }>(
     "/auth/register",
     {
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
       schema: {
         tags: ["Auth"],
         summary: "Register a new student account",
@@ -130,6 +131,7 @@ export async function authRoute(app: FastifyInstance) {
   app.post<{ Body: LoginBody }>(
     "/auth/login",
     {
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
       schema: {
         tags: ["Auth"],
         summary: "Login with email and password",
