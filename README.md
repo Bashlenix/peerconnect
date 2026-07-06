@@ -37,8 +37,9 @@ Every new post makes the AI more useful. Every answer the AI surfaces reduces du
 5. [Features & Expected Behaviour](#features--expected-behaviour)
 6. [Manual Test Scenarios](#manual-test-scenarios)
 7. [API Documentation](#api-documentation)
-8. [Project Structure](#project-structure)
-9. [Known Limitations](#known-limitations)
+8. [Continuous Integration](#continuous-integration)
+9. [Project Structure](#project-structure)
+10. [Known Limitations](#known-limitations)
 
 ---
 
@@ -56,6 +57,8 @@ Every new post makes the AI more useful. Every answer the AI surfaces reduces du
 | Real-time | Server-Sent Events (SSE) |
 | Email | Nodemailer → Resend SMTP |
 | API Docs | Fastify Swagger (OpenAPI 3) |
+| Logging | Pino — pretty-printed in dev, JSON in production, secrets redacted |
+| Rate limiting | `@fastify/rate-limit` — global default + stricter limits on login/register |
 
 ### Frontend
 | Concern | Technology |
@@ -232,6 +235,7 @@ These accounts give you a realistic multi-user feed with posts and replies sprea
 - **Registration** — Email must belong to a recognised German university domain. First and last name are required; study programme, semester, languages, and an initial Free/Premium plan choice (mock, no payment) are optional and can be filled in later via Settings if skipped. A verification email is sent before the account is active. (Requires SMTP setup; not available in local dev without it.)
 - **Login / Logout** — Sessions use short-lived JWTs (15 min) stored in httpOnly cookies, backed by a refresh token stored as a hash in the database.
 - **Session persistence** — On page load the app silently refreshes the session via the refresh token; users stay logged in across browser restarts.
+- **Rate limited** — Login and registration are limited to 5 requests per minute per client (separate from the general API-wide limit below) to slow down brute-force/signup-spam attempts. Exceeding it returns a `429` with a `Retry-After` header.
 
 ### Feed
 - The main feed shows all posts, newest first.
@@ -426,12 +430,30 @@ The backend auto-generates interactive OpenAPI documentation using Fastify Swagg
 
 The Swagger UI lists every endpoint with its request schema, response schema, and lets you make test requests directly from the browser. This is the fastest way to explore or manually test backend behaviour without writing curl commands.
 
+**Rate limiting** — Every endpoint is limited to 100 requests/minute per client by default (`/auth/login` and `/auth/register` are stricter — see [Authentication](#authentication)); `/ai/*` routes are exempt since they have their own more precise per-user quota (see [AI Ask Bot](#ai-ask-bot)). Exceeding a limit returns `429` with `{ "code": "rate_limited", "message": "..." }` and a `Retry-After` header.
+
+---
+
+## Continuous Integration
+
+Every push and pull request against `main` runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on GitHub Actions:
+
+1. Installs dependencies and builds `packages/shared`.
+2. Generates the Prisma client and runs migrations against a `postgres:16` service container.
+3. Guards against a known Prisma code-generation issue on the `search_vector` column re-appearing in a new migration (see `CLAUDE.md`).
+4. Runs `npm run typecheck`, `npm run build`, and the full backend test suite.
+
+There is no branch protection requiring the check to pass yet — it currently runs for visibility only.
+
 ---
 
 ## Project Structure
 
 ```
 PeerConnect/
+├── .github/
+│   └── workflows/
+│       └── ci.yml                   # Typecheck, build, test on every push/PR (see Continuous Integration)
 ├── apps/
 │   ├── backend/
 │   │   ├── prisma/
@@ -445,15 +467,18 @@ PeerConnect/
 │   │   │   ├── index.ts             # Entry point — starts the server
 │   │   │   ├── app.ts               # Fastify app setup, plugins, route registration
 │   │   │   ├── db.ts                # Prisma client singleton
+│   │   │   ├── logger.ts            # Pino instance — level, redaction, pretty/JSON transport
 │   │   │   ├── routes/              # One file per resource (auth, posts, replies, users, notifications, ads)
 │   │   │   ├── modules/             # Domain logic extracted from routes
 │   │   │   │   ├── ai-retrieval.ts        # FTS retrieval for AI Ask Bot (top-N posts + accepted solutions)
 │   │   │   │   ├── ai-answer.ts           # GPT-4.1-nano synthesis — strict source-only prompt
 │   │   │   │   ├── badge-engine.ts        # Badge award logic — data-driven loop over BADGE_RULES from @peerconnect/shared (atomic)
+│   │   │   │   ├── db-errors.ts           # Detects "database unreachable" errors for the 503 handler
 │   │   │   │   ├── domain-validator.ts    # University email domain checks
 │   │   │   │   ├── email-verification-service.ts
 │   │   │   │   ├── feed-query.ts          # Composable Prisma filters for the post feed
 │   │   │   │   ├── post-search.ts         # Full-text search query builder
+│   │   │   │   ├── rate-limit-errors.ts   # Detects @fastify/rate-limit's thrown error shape for the 429 handler
 │   │   │   │   ├── reply-query.ts         # Reply sorting logic
 │   │   │   │   ├── sse-manager.ts         # Server-Sent Events connection registry
 │   │   │   │   └── token-service.ts       # JWT + refresh token handling
