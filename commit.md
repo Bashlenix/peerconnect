@@ -781,3 +781,57 @@ Blockers/notes for next iteration:
   #63) are the remaining issues from this session.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+chore(#63): auto-generate apps/backend/.env on Codespace setup
+
+Key decisions:
+- New .devcontainer/setup-env.sh mirrors db-up.sh's own style (set -euo
+  pipefail, cd to repo root regardless of caller CWD, idempotent). Skips
+  entirely if apps/backend/.env already exists, so a container rebuild
+  never clobbers a hand-edited .env.
+- cp's from .env.example first (so future vars added there flow through
+  automatically) rather than generating the file from scratch, then fixes
+  exactly 3 known lines via sed: JWT_SECRET gets a real openssl rand -hex
+  32 value; SMTP_PASS and OPENAI_API_KEY get commented out rather than
+  copied verbatim.
+- The comment-out matters: ai-answer.ts's `if (!apiKey) throw ...` guard
+  only catches a fully-unset var. A literal placeholder string like
+  "<openai-api-key>" is non-empty, so it passes that guard and attempts a
+  real OpenAI call with garbage credentials - a messier failure than
+  today's clean "not configured" error. Still fully compatible with a real
+  Codespaces secret set later - dotenv never overrides an already-set env
+  var.
+- Wired into postCreateCommand ahead of db-up.sh.
+
+Verification note: this script's only real runtime target is the Linux
+devcontainer, and this session runs on macOS (BSD sed, incompatible -i
+syntax). Verified inside a real container running the exact base image
+from devcontainer.json (mcr.microsoft.com/devcontainers/javascript-node:22)
+against a scratch copy of just the script + .env.example - never touched
+this machine's real apps/backend/.env (confirmed its mtime was unchanged
+afterward).
+
+Files changed:
+- .devcontainer/setup-env.sh: new script.
+- .devcontainer/devcontainer.json: postCreateCommand wiring.
+- .ai/issues/done/63-auto-generate-env.md: issue moved to done.
+
+Verified: first run generates a correct .env (64-char hex JWT_SECRET,
+DATABASE_URL/FRONTEND_URL unchanged, SMTP_PASS/OPENAI_API_KEY commented
+out); second run is byte-for-byte identical (diff confirmed) - correctly a
+no-op. Loaded the generated file through the real dotenv package (same
+call pattern db.ts uses) and confirmed OPENAI_API_KEY/SMTP_PASS resolve to
+undefined - the exact condition the AI guard needs to take the clean path
+rather than a real API call with the placeholder. No TypeScript touched,
+but re-ran typecheck/build/full backend suite anyway (277/277 passing).
+
+Blockers/notes for next iteration:
+- #64 (auto-start dev servers) is the last issue from this session, now
+  unblocked.
+- The AI-guard verification was via dotenv-loading in isolation, not a full
+  app boot - #64 will exercise the complete flow end-to-end once dev
+  servers actually auto-start against this generated .env.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

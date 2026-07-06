@@ -1,7 +1,7 @@
 # 63 — Auto-generate apps/backend/.env on Codespace setup
 
 **Type:** Chore
-**Labels:** needs-triage
+**Labels:** needs-triage, done
 **GitHub:** https://github.com/Bashlenix/peerconnect/issues/69
 
 ## What to build
@@ -42,16 +42,46 @@ injected secret always wins regardless of what's (or isn't) in the file.
 
 ## Acceptance criteria
 
-- [ ] Running `setup-env.sh` against a repo with no `apps/backend/.env`
+- [x] Running `setup-env.sh` against a repo with no `apps/backend/.env`
       creates one with a real random `JWT_SECRET`, working
       `DATABASE_URL`/`FRONTEND_URL` values, and `SMTP_PASS`/`OPENAI_API_KEY`
       commented out.
-- [ ] Running it a second time is a no-op (existing `.env` untouched).
-- [ ] The AI Ask Bot endpoint, hit without a real `OPENAI_API_KEY`, still
+- [x] Running it a second time is a no-op (existing `.env` untouched).
+- [x] The AI Ask Bot endpoint, hit without a real `OPENAI_API_KEY`, still
       returns today's clean "not configured" error rather than a raw
       OpenAI auth failure.
-- [ ] `postCreateCommand` calls `setup-env.sh` before `db-up.sh`.
+- [x] `postCreateCommand` calls `setup-env.sh` before `db-up.sh`.
 
 ## Blocked by
 
 None - can start immediately
+
+## Completion notes
+
+Built exactly as scoped, with one care point during verification: since the
+script's only real runtime target is the Linux devcontainer, and this
+session runs on macOS (BSD `sed`, incompatible `-i` syntax vs. the GNU `sed`
+the script actually needs), I verified it inside a real container running
+the exact base image from `devcontainer.json`
+(`mcr.microsoft.com/devcontainers/javascript-node:22`), against a scratch
+copy of just `.devcontainer/setup-env.sh` + `apps/backend/.env.example` —
+never touching this machine's real `apps/backend/.env` (confirmed its mtime
+was unchanged afterward).
+
+- First run: generated a `.env` with a real 64-char hex `JWT_SECRET`,
+  `DATABASE_URL`/`FRONTEND_URL` copied through unchanged, and `SMTP_PASS` /
+  `OPENAI_API_KEY` both commented out.
+- Second run: byte-for-byte identical output (confirmed via `diff`) —
+  correctly skipped as a no-op.
+- Loaded the generated file through the real `dotenv` package (same call
+  pattern `apps/backend/src/db.ts` uses) and confirmed
+  `process.env.OPENAI_API_KEY`/`SMTP_PASS` are both `undefined` — i.e. the
+  exact condition `ai-answer.ts`'s `if (!apiKey) throw ...` guard needs to
+  take the clean "not configured" path rather than attempting a real API
+  call with the placeholder string. Didn't boot the full app/DB for this —
+  that's #64's concern once the whole auto-start flow is wired together;
+  this is a faithful, sufficient proxy for the guard condition itself.
+
+No TypeScript was touched, but re-ran the full loop anyway per usual
+discipline: `npm run typecheck`, `npm run build`, and the full backend
+suite (277/277) all clean/unaffected.
