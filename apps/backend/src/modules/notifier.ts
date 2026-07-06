@@ -1,6 +1,7 @@
 import type { PostCategory, NotificationType } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
 import { sseManager } from "./sse-manager.js";
+import { logger } from "../logger.js";
 
 export type NotificationEvent =
   | { type: "NEW_POST_IN_CATEGORY"; postId: string; category: string; authorId: string }
@@ -77,6 +78,6 @@ export async function dispatch(event: NotificationEvent): Promise<void> {
       }
     }
   } catch (err) {
-    console.error("[notifier] dispatch failed:", event.type, err);
+    logger.error({ err, eventType: event.type }, "notifier dispatch failed");
   }
 }

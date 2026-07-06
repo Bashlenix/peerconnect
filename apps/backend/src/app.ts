@@ -7,6 +7,7 @@ import fastifyJwt from "@fastify/jwt";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import type { ServiceErrorResponse } from "@peerconnect/shared";
 import { isDatabaseUnavailableError } from "./modules/db-errors.js";
+import { logger } from "./logger.js";
 import { healthRoute } from "./routes/health.js";
 import { authRoute } from "./routes/auth.js";
 import { postsRoute } from "./routes/posts.js";
@@ -30,7 +31,7 @@ declare module "fastify" {
 }
 
 export async function buildApp() {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ loggerInstance: logger });
 
   await app.register(fastifyCors, {
     origin: process.env["FRONTEND_URL"] ?? "http://localhost:5173",

@@ -544,3 +544,67 @@ Blockers / notes for next iteration:
 - UI still has not been visually verified in an actual browser.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+feat(#59): turn on structured logging (pino)
+
+Fastify's logger was fully disabled (`Fastify({ logger: false })`), so
+nothing structured was ever emitted — only a handful of console.log /
+console.error calls remained. Closes the "logging" gap flagged in a
+/grill-me → /to-issues design session against the project's dev-checklist
+evaluation report (GitHub #65).
+
+Key decisions (from the grill-me session):
+- New apps/backend/src/logger.ts exports a single pino instance, wired into
+  Fastify via the `loggerInstance` option (Fastify v5 supports passing a
+  pre-built pino instance this way) — lets notifier.ts and index.ts share
+  the exact same instance/config instead of re-deriving it.
+- Level branches on NODE_ENV: "silent" under test (keeps all pre-existing
+  tests' output, and future CI logs, quiet), "info" otherwise. Pretty-printed
+  via pino-pretty outside production, plain JSON in production.
+- Redact config strips req.headers.cookie, req.headers.authorization,
+  req.body.password, and res.headers["set-cookie"] — covers both the
+  request side (login/register bodies, forwarded cookies) and the response
+  side (Set-Cookie headers issued on login/register), since Fastify's
+  default req/res serializers would otherwise put both in the log line
+  verbatim.
+- Test-first (TDD): wrote apps/backend/tests/logger.test.ts against a
+  not-yet-existing src/logger.ts (confirmed red), then implemented. The two
+  testable seams: `logger.level` (silent under test) and `redactConfig`
+  used to build a scratch pino instance against a captured stream (the four
+  sensitive paths never appear in emitted JSON; non-sensitive fields do).
+  Didn't try to test the app.ts/index.ts/notifier.ts wiring directly — with
+  level=silent under test there's nothing observable to assert beyond "the
+  existing suite still passes," which is the real regression guard here.
+
+Files changed:
+  apps/backend/src/logger.ts            (new — pino instance + redact config)
+  apps/backend/src/app.ts               (Fastify({ logger: false }) →
+                                          Fastify({ loggerInstance: logger }))
+  apps/backend/src/index.ts             (console.log → logger.info for the
+                                          two startup lines)
+  apps/backend/src/modules/notifier.ts  (console.error → logger.error in the
+                                          dispatch catch)
+  apps/backend/tests/logger.test.ts     (new — 2 tests)
+  apps/backend/package.json             (+pino dependency, +pino-pretty
+                                          devDependency)
+
+Verified: full backend suite green (270/270, 16/16 files — 2 new).
+Typecheck and both workspace builds (tsc + vite build) clean, including
+the check-db-seed-imports prebuild guard. Manually started the dev server
+and curled /health — pretty request/response log lines appeared as
+expected, with no secrets visible.
+
+Blockers / notes for next iteration:
+- npm run lint and n8n start from ralph/prompt.md's feedback-loop list were
+  skipped: no lint script/ESLint config exists anywhere in this repo, and
+  n8n is unrelated to this project (template leftover) — same note as
+  prior sessions in this file.
+- #60 (CI pipeline) and #61 (general rate limiting) are the other two
+  issues from the same design session — both unblocked, independent of
+  this one, and are the intended next tasks for the ralph loop.
+- UI/browser was not touched by this change; only the backend dev server
+  was manually exercised via curl.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
