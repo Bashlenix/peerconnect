@@ -835,3 +835,55 @@ Blockers/notes for next iteration:
   servers actually auto-start against this generated .env.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+chore(#64): auto-start dev servers on Codespace start
+
+Key decision: postStartCommand becomes
+`bash .devcontainer/setup-env.sh && bash .devcontainer/db-up.sh && (nohup npm run dev > /tmp/peerconnect-dev.log 2>&1 &)`
+- the explicit subshell `(... &)` around only the dev-server start is load
+  bearing. Without it, `A && B && C &` backgrounds the *whole* chain as one
+  job - db-up.sh's blocking Postgres-readiness wait would itself run in the
+  background, and the devcontainer lifecycle would report "ready" before
+  Postgres actually is.
+
+Verified this specific risk with an observable marker file rather than
+trusting timing alone - timing doesn't distinguish the two versions, both
+"return immediately," which is exactly what makes the bug easy to miss:
+- `A && (sleep 2; touch marker) && (sleep 5 &)`: marker exists immediately
+  after the chain returns - blocking step ran synchronously, correct.
+- `A && (sleep 2; touch marker) && sleep 5 &` (no parens on the last part):
+  marker does NOT exist when the chain returns - confirms the exact bug
+  this design avoids.
+
+Files changed:
+- .devcontainer/devcontainer.json: postStartCommand.
+- .ai/issues/done/64-autostart-dev-servers.md: issue moved to done.
+
+Verified end-to-end for the parts this local machine can actually exercise:
+couldn't run the real db-up.sh here since this machine uses a native
+Postgres install, not the peerconnect-db Docker container db-up.sh manages
+- doing so would have started an unrelated container colliding with the
+native install's port 5432. Substituted a sleep-based stand-in for the
+blocking-step grouping test above (structurally identical risk, decoupled
+from Docker specifics), then separately verified the real npm run dev
+backgrounding against this machine's real environment: confirmed no
+backend/vite processes running beforehand, ran the exact backgrounded
+command, confirmed it returned in ~0.01s, then after a few seconds curl
+localhost:3001/health -> 200, curl localhost:5173 -> 200, and
+/tmp/peerconnect-dev.log contained the full shared/backend/frontend
+startup output (including #59's pretty-printed pino logs). Stopped all
+background processes and removed the log file afterward. No TypeScript
+touched; typecheck/build/test suite unaffected.
+
+Blockers/notes for next iteration:
+- This closes out the fully-automatic-Codespace-startup batch (#62, #63,
+  #64 all done) from the second grill-me/to-issues session.
+- Nothing from this batch has been verified on an actual GitHub Codespace
+  yet - only locally and via the devcontainer base image in Docker. Worth
+  a real Codespace create/resume once convenient.
+- The untracked README follow-up (documenting the new automatic flow,
+  matching how #59-61's README update was handled) is still outstanding.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
