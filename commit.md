@@ -908,3 +908,83 @@ above. Ready to push: 4 local commits ahead of origin/main (#62, #63, #64,
 this docs commit).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+chore: configure GitHub Issues tracker and triage labels for agent skills
+
+Runs the setup-matt-pocock-skills process: GitHub Issues (no PR triage,
+solo repo), default triage label vocabulary (created the three missing
+GitHub labels), single-context domain docs. Needed before to-issues could
+publish real tickets for the forgot-password work.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+feat(auth): forgot-password request flow with hashed reset tokens
+
+Closes #71. Implements the "request reset link" half of forgot-password
+(the "complete reset with new password" half is tracked separately as
+#72/.ai/issues/66, blocked on this).
+
+Key decisions:
+- passwordResetTokenHash is SHA-256 hashed (never stored raw), following
+  the refresh-token pattern in token-service.ts rather than the plaintext
+  emailVerificationToken pattern — a reset token grants account takeover
+  so it gets the stronger treatment.
+- POST /auth/forgot-password always returns the same generic message
+  regardless of whether the email exists, to avoid account enumeration.
+- A new request overwrites any outstanding token (single valid token per
+  user), gated by a 60s per-email cooldown tracked via the existing
+  passwordResetExpiry column (no extra column needed), on top of the
+  existing per-IP @fastify/rate-limit config already used by
+  login/register.
+- Extracted apps/backend/src/modules/mailer.ts (shared
+  createTransporter/sendMail) and refactored sendVerificationEmail onto
+  it, since this feature adds a second near-identical email and a third
+  is coming in #72.
+- The prisma migration for the two new User columns was hand-written and
+  applied directly via psql + `prisma migrate resolve --applied`, per
+  CLAUDE.md: `prisma migrate dev` refuses on this schema due to the
+  known search_vector/tsvector drift and wants to reset the dev DB, which
+  would have destroyed local data.
+
+Files changed:
+- apps/backend/prisma/schema.prisma,
+  prisma/migrations/20260709120000_add_password_reset_to_user/ — new
+  User.passwordResetTokenHash / passwordResetExpiry columns
+- apps/backend/src/modules/mailer.ts — new shared mail helper
+- apps/backend/src/modules/auth-service.ts — sendVerificationEmail
+  refactored onto mailer.ts; new requestPasswordReset +
+  sendPasswordResetEmail
+- apps/backend/src/routes/auth.ts — new POST /auth/forgot-password,
+  rate-limited like /auth/login
+- apps/backend/tests/auth.test.ts, rate-limit.test.ts — coverage for
+  enumeration-safety, cooldown, token overwrite, and rate limiting
+- apps/frontend/src/pages/ForgotPasswordPage.tsx — new request form
+- apps/frontend/src/pages/CheckEmailPage.tsx — parametrized with a
+  register|reset variant instead of duplicating the component
+- apps/frontend/src/pages/LoginPage.tsx, App.tsx, api/auth.ts —
+  "Forgot password?" link, /forgot-password route, requestPasswordReset
+  API function
+
+Verified end-to-end with Playwright against the real dev servers (real
+Gmail SMTP already configured locally): login link -> forgot-password
+form -> known email shows reset-flavored check-email copy -> unknown
+email shows the identical page (no enumeration leak) -> registration's
+check-email page still shows its original copy (no regression from the
+CheckEmailPage parametrization). Confirmed passwordResetTokenHash was
+actually written in Postgres, then cleaned up the test artifacts.
+
+npm run typecheck / test (283 backend tests) / build all pass. No lint
+script exists in this repo (skipped); `n8n start` from the generic ralph
+template is unrelated to this project's stack (skipped).
+
+Blockers/notes for next iteration: #72 (complete-reset flow) is ready to
+start — GET /auth/reset-password/validate, POST /auth/reset-password,
+ResetPasswordPage.tsx, session invalidation via clearing
+refreshTokenHash, and the "password changed" confirmation email reusing
+mailer.ts.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
