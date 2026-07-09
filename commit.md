@@ -1053,3 +1053,15 @@ template is unrelated to this project's stack (skipped).
 Forgot-password feature (#71 + #72) is now complete end-to-end.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+docs: document the forgot-password flow in README
+
+Covers the #71/#72 feature: new Authentication bullet describing the
+request/reset flow, rate-limiting call-outs updated to include
+/auth/forgot-password and /auth/reset-password, file tree entries for
+mailer.ts, ForgotPasswordPage.tsx, and ResetPasswordPage.tsx, and four
+new Manual Test Scenarios checklist items.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
