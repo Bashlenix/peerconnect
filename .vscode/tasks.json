@@ -9,7 +9,7 @@
       // there are reaped when the hook exits (nohup only blocks SIGHUP).
       "label": "Start dev servers",
       "type": "shell",
-      "command": "[ -x node_modules/.bin/tsc ] || npm ci; npm run dev",
+      "command": "until [ -x node_modules/.bin/tsc ]; do echo 'waiting for deps...'; sleep 3; done; npm run dev",
       "runOptions": { "runOn": "folderOpen" },
       "isBackground": true,
       "presentation": {
