@@ -988,3 +988,68 @@ refreshTokenHash, and the "password changed" confirmation email reusing
 mailer.ts.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+────────────────────────────────────────────────────────────────
+
+feat(auth): complete password reset flow, invalidating existing sessions
+
+Closes #72. Implements the "complete reset with new password" half of
+forgot-password, building on #71's token/mailer infra.
+
+Key decisions:
+- GET /auth/reset-password/validate checks the token (hash + expiry)
+  without consuming it, so the frontend can show "link expired" on page
+  load instead of only after the user fills out the whole form.
+- POST /auth/reset-password re-validates, updates passwordHash, clears
+  passwordResetTokenHash/Expiry (single-use), and clears
+  refreshTokenHash/Expiry — same mechanism logout uses — to force
+  re-login everywhere. The 15-minute access-token JWT itself can't be
+  revoked early (no blocklist exists anywhere in this app, including
+  logout), so this is consistent with the app's existing security model
+  rather than a new gap.
+- sendPasswordChangedEmail reuses mailer.ts from #71.
+- tests/setup-env.ts's global nodemailer mock now records sent mail into
+  an exported `sentEmails` array, since the reset token is only ever
+  transmitted through the email body (unlike the plaintext
+  emailVerificationToken, which tests could read straight from the DB).
+
+Files changed:
+- apps/backend/src/modules/auth-service.ts — validateResetToken,
+  resetPassword, sendPasswordChangedEmail
+- apps/backend/src/routes/auth.ts — GET /auth/reset-password/validate,
+  POST /auth/reset-password, both rate-limited like /auth/login
+- apps/backend/tests/setup-env.ts — nodemailer mock now captures sent
+  mail (sentEmails)
+- apps/backend/tests/auth.test.ts, rate-limit.test.ts — coverage for
+  validate (fresh/garbage/expired token), reset (success, session
+  invalidation, confirmation email, expired/invalid/reused/short-password
+  rejection), and rate limiting
+- apps/frontend/src/pages/ResetPasswordPage.tsx — validates the token on
+  load, shows an expired-link state or the new-password form, redirects
+  to /login ~2s after success
+- apps/frontend/src/App.tsx, api/auth.ts — /reset-password route,
+  validateResetToken + resetPassword API functions
+
+Verified end-to-end with Playwright against the real dev servers: seeded
+a real reset token for a pre-seeded account by hashing it the same way
+auth-service.ts does (email retrieval isn't available in this
+environment), then drove /reset-password through missing-token,
+expired-token, valid-token-shows-form, mismatched-passwords-blocked, and
+successful-reset states; confirmed the old password stops working and
+the new one logs in. Caught and fixed one real test-fixture bug along
+the way: seeding an "expired" token via raw `psql NOW() - INTERVAL`
+against the passwordResetExpiry timestamp-without-timezone column
+produces a value that Node reads back as *later* than actual UTC now
+(session-timezone-relative SQL vs. the app's own UTC-based Date writes)
+— not a product bug, since the app always writes this column through
+Prisma with a plain JS Date, exactly like the passing vitest suite
+already does; fixed by reseeding through Prisma. Restored the seeded
+account's real password afterward.
+
+npm run typecheck / test (293 backend tests) / build all pass. No lint
+script exists in this repo (skipped); `n8n start` from the generic ralph
+template is unrelated to this project's stack (skipped).
+
+Forgot-password feature (#71 + #72) is now complete end-to-end.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
