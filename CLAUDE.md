@@ -20,3 +20,17 @@ contain is the SQL that reflects the actual schema change you made.
 
 The pre-commit hook in `.githooks/pre-commit` will block a commit if any
 staged migration SQL file still references `search_vector`.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues (Bashlenix/peerconnect), via the `gh` CLI. External PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root (created lazily when needed). See `docs/agents/domain.md`.
