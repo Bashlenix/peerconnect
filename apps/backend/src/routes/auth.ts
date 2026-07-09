@@ -7,6 +7,8 @@ import {
   verifyRefreshToken,
   logout,
   requestPasswordReset,
+  validateResetToken,
+  resetPassword,
 } from "../modules/auth-service.js";
 import { setAccessTokenCookie, setRefreshTokenCookie, clearAuthCookies } from "../modules/token-service.js";
 
@@ -34,6 +36,15 @@ interface VerifyEmailQuery {
 
 interface ForgotPasswordBody {
   email: string;
+}
+
+interface ValidateResetTokenQuery {
+  token: string;
+}
+
+interface ResetPasswordBody {
+  token: string;
+  newPassword: string;
 }
 
 export async function authRoute(app: FastifyInstance) {
@@ -165,6 +176,83 @@ export async function authRoute(app: FastifyInstance) {
     async (request, reply) => {
       await requestPasswordReset(request.body.email);
       return reply.status(200).send({ message: "If that email is registered, we've sent a password reset link." });
+    }
+  );
+
+  // ─── GET /auth/reset-password/validate ────────────────────────────────────
+
+  app.get<{ Querystring: ValidateResetTokenQuery }>(
+    "/auth/reset-password/validate",
+    {
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+      schema: {
+        tags: ["Auth"],
+        summary: "Check whether a password reset token is still valid",
+        querystring: {
+          type: "object",
+          required: ["token"],
+          properties: {
+            token: { type: "string" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: { valid: { type: "boolean" } },
+            required: ["valid"],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const valid = await validateResetToken(request.query.token);
+      return reply.status(200).send({ valid });
+    }
+  );
+
+  // ─── POST /auth/reset-password ────────────────────────────────────────────
+
+  app.post<{ Body: ResetPasswordBody }>(
+    "/auth/reset-password",
+    {
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+      schema: {
+        tags: ["Auth"],
+        summary: "Set a new password using a password reset token",
+        body: {
+          type: "object",
+          required: ["token", "newPassword"],
+          properties: {
+            token: { type: "string" },
+            newPassword: { type: "string", minLength: 8 },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
+          400: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { token, newPassword } = request.body;
+      const result = await resetPassword(token, newPassword);
+
+      if (!result.ok) {
+        const message = result.reason === "expired"
+          ? "Reset link has expired. Please request a new one."
+          : "Invalid reset token.";
+        return reply.status(400).send({ message });
+      }
+
+      return reply.status(200).send({ message: "Password reset successfully. Please log in." });
     }
   );
 

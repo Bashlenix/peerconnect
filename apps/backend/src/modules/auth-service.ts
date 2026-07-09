@@ -26,6 +26,8 @@ export type LoginResult =
   | { ok: true; refreshToken: string; user: { id: string; email: string; firstName: string | null; lastName: string | null } }
   | { ok: false; reason: "not_found" | "wrong_password" | "not_verified" };
 
+export type ResetPasswordResult = { ok: true } | { ok: false; reason: "invalid" | "expired" };
+
 export interface RegisterInput {
   email: string;
   password: string;
@@ -183,4 +185,49 @@ export async function requestPasswordReset(email: string): Promise<void> {
   });
 
   await sendPasswordResetEmail(normalised, token);
+}
+
+async function sendPasswordChangedEmail(email: string): Promise<void> {
+  await sendMail(
+    email,
+    "Your PeerConnect password was changed",
+    `Your PeerConnect password was just changed. If this wasn't you, please contact support immediately.`,
+    `<p>Your PeerConnect password was just changed.</p><p>If this wasn't you, please contact support immediately.</p>`
+  );
+}
+
+export async function validateResetToken(token: string): Promise<boolean> {
+  const user = await prisma.user.findFirst({
+    where: { passwordResetTokenHash: hashToken(token) },
+    select: { passwordResetExpiry: true },
+  });
+  return !!user?.passwordResetExpiry && user.passwordResetExpiry > new Date();
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<ResetPasswordResult> {
+  const user = await prisma.user.findFirst({
+    where: { passwordResetTokenHash: hashToken(token) },
+    select: { id: true, email: true, passwordResetExpiry: true },
+  });
+
+  if (!user) return { ok: false, reason: "invalid" };
+  if (!user.passwordResetExpiry || user.passwordResetExpiry < new Date()) {
+    return { ok: false, reason: "expired" };
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      passwordResetTokenHash: null,
+      passwordResetExpiry: null,
+      refreshTokenHash: null,
+      refreshTokenExpiry: null,
+    },
+  });
+
+  await sendPasswordChangedEmail(user.email);
+
+  return { ok: true };
 }

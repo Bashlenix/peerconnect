@@ -34,6 +34,14 @@ export interface ForgotPasswordResponse {
   message: string;
 }
 
+export interface ValidateResetTokenResponse {
+  valid: boolean;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
 export interface Subscription {
   status: "free" | "premium";
   startDate: string;
@@ -117,6 +125,34 @@ export async function requestPasswordReset(email: string): Promise<ForgotPasswor
 
   if (!res.ok) {
     throw new AuthError(data.message ?? "Request failed", data.code);
+  }
+
+  return data;
+}
+
+export async function validateResetToken(token: string): Promise<ValidateResetTokenResponse> {
+  const res = await fetch(`${BASE}/auth/reset-password/validate?token=${encodeURIComponent(token)}`, {
+    credentials: "include",
+  });
+
+  return res.json() as Promise<ValidateResetTokenResponse>;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<ResetPasswordResponse> {
+  const res = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token, newPassword }),
+  });
+
+  const data = (await res.json()) as ResetPasswordResponse & {
+    message?: string;
+    code?: ServiceErrorCode;
+  };
+
+  if (!res.ok) {
+    throw new AuthError(data.message ?? "Reset failed", data.code);
   }
 
   return data;

@@ -65,6 +65,24 @@ describe("rate limiting", () => {
     expect(limited?.json()).toEqual({ code: "rate_limited", message: expect.any(String) });
   });
 
+  it("rate-limits /auth/reset-password more aggressively than the global default", async () => {
+    let limited: Awaited<ReturnType<typeof app.inject>> | undefined;
+    for (let i = 0; i < 10; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token: `wrong-token-${i}`, newPassword: "somePassword1" },
+      });
+      if (res.statusCode === 429) {
+        limited = res;
+        break;
+      }
+    }
+
+    expect(limited).toBeDefined();
+    expect(limited?.json()).toEqual({ code: "rate_limited", message: expect.any(String) });
+  });
+
   it("does not apply the global limiter to /ai/* routes", async () => {
     for (let i = 0; i < 105; i++) {
       const res = await app.inject({

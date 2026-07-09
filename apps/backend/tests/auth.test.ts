@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { createHash } from "crypto";
 import { buildApp } from "../src/app.js";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import { seedReferenceData } from "../prisma/seed-data.js";
+import { sentEmails } from "./setup-env.js";
 
 const TEST_DB_URL =
   process.env["DATABASE_URL"] ?? "postgresql://bashi@localhost:5432/peerconnect_test";
@@ -36,6 +38,7 @@ afterAll(async () => {
 afterEach(async () => {
   // Clean users between tests but keep reference data
   await pool.query("DELETE FROM users");
+  sentEmails.length = 0;
 });
 
 // ─── POST /auth/register ──────────────────────────────────────────────────────
@@ -450,6 +453,209 @@ describe("POST /auth/forgot-password", () => {
       payload: {},
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+// ─── GET /auth/reset-password/validate & POST /auth/reset-password ────────────
+
+describe("password reset (validate + complete)", () => {
+  async function registerAndRequestReset(email: string) {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email, password: "securePass1", firstName: "Test", lastName: "User" },
+    });
+    const user = await prisma.user.findUnique({ where: { email } });
+    await prisma.user.update({
+      where: { id: user!.id },
+      data: { isVerified: true, emailVerificationToken: null, emailVerificationExpiry: null },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email },
+    });
+
+    const resetEmail = [...sentEmails].reverse().find((m) => m.to === email && m.subject.includes("Reset"));
+    const match = resetEmail!.text.match(/token=([a-f0-9]+)/);
+    return match![1]!;
+  }
+
+  describe("GET /auth/reset-password/validate", () => {
+    it("returns valid: true for a freshly issued token", async () => {
+      const token = await registerAndRequestReset("reset-validate-ok@tu-berlin.de");
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/auth/reset-password/validate?token=${token}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ valid: true });
+    });
+
+    it("returns valid: false for a garbage token", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/auth/reset-password/validate?token=totally-wrong-token",
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ valid: false });
+    });
+
+    it("returns valid: false for an expired token", async () => {
+      const rawToken = "expired-raw-token-abc";
+      await prisma.user.create({
+        data: {
+          email: "reset-validate-expired@tu-berlin.de",
+          passwordHash: "hash",
+          passwordResetTokenHash: createHash("sha256").update(rawToken).digest("hex"),
+          passwordResetExpiry: new Date(Date.now() - 1000),
+        },
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/auth/reset-password/validate?token=${rawToken}`,
+      });
+
+      expect(res.json()).toEqual({ valid: false });
+    });
+  });
+
+  describe("POST /auth/reset-password", () => {
+    it("sets a new password, clears the reset token, and invalidates existing sessions", async () => {
+      const email = "reset-complete-ok@tu-berlin.de";
+      const token = await registerAndRequestReset(email);
+
+      // Log in first to establish a refresh token, proving it gets cleared.
+      const loginRes = await app.inject({
+        method: "POST",
+        url: "/auth/login",
+        payload: { email, password: "securePass1" },
+      });
+      const cookies = loginRes.headers["set-cookie"] as string | string[];
+      const refreshCookie = (Array.isArray(cookies) ? cookies : [cookies])
+        .flatMap((c) => c.split(";").map((p) => p.trim()))
+        .find((c) => c.startsWith("refresh_token="));
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token, newPassword: "newSecurePass2" },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ message: expect.stringContaining("reset successfully") });
+
+      const updated = await prisma.user.findUnique({ where: { email } });
+      expect(updated!.passwordResetTokenHash).toBeNull();
+      expect(updated!.passwordResetExpiry).toBeNull();
+      expect(updated!.refreshTokenHash).toBeNull();
+
+      // Old refresh token no longer yields a session.
+      const meRes = await app.inject({
+        method: "GET",
+        url: "/auth/me",
+        headers: { cookie: refreshCookie },
+      });
+      expect(meRes.statusCode).toBe(401);
+
+      // New password works; old one doesn't.
+      const loginWithNew = await app.inject({
+        method: "POST",
+        url: "/auth/login",
+        payload: { email, password: "newSecurePass2" },
+      });
+      expect(loginWithNew.statusCode).toBe(200);
+
+      const loginWithOld = await app.inject({
+        method: "POST",
+        url: "/auth/login",
+        payload: { email, password: "securePass1" },
+      });
+      expect(loginWithOld.statusCode).toBe(401);
+    });
+
+    it("sends a password-changed confirmation email", async () => {
+      const email = "reset-confirm-email@tu-berlin.de";
+      const token = await registerAndRequestReset(email);
+
+      await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token, newPassword: "newSecurePass2" },
+      });
+
+      const confirmation = [...sentEmails].reverse().find((m) => m.to === email && m.subject.includes("changed"));
+      expect(confirmation).toBeDefined();
+    });
+
+    it("returns 400 for an expired token", async () => {
+      const rawToken = "expired-raw-token-def";
+      await prisma.user.create({
+        data: {
+          email: "reset-complete-expired@tu-berlin.de",
+          passwordHash: "hash",
+          passwordResetTokenHash: createHash("sha256").update(rawToken).digest("hex"),
+          passwordResetExpiry: new Date(Date.now() - 1000),
+        },
+      });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token: rawToken, newPassword: "newSecurePass2" },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ message: expect.stringContaining("expired") });
+    });
+
+    it("returns 400 for an invalid/garbage token", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token: "totally-wrong-token", newPassword: "newSecurePass2" },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ message: "Invalid reset token." });
+    });
+
+    it("rejects a token that has already been used", async () => {
+      const email = "reset-reuse@tu-berlin.de";
+      const token = await registerAndRequestReset(email);
+
+      const first = await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token, newPassword: "newSecurePass2" },
+      });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token, newPassword: "anotherPass3" },
+      });
+      expect(second.statusCode).toBe(400);
+    });
+
+    it("returns 400 for a new password shorter than 8 characters", async () => {
+      const email = "reset-short-pw@tu-berlin.de";
+      const token = await registerAndRequestReset(email);
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/auth/reset-password",
+        payload: { token, newPassword: "short" },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
   });
 });
 
