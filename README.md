@@ -58,7 +58,7 @@ Every new post makes the AI more useful. Every answer the AI surfaces reduces du
 | Email | Nodemailer → Resend SMTP |
 | API Docs | Fastify Swagger (OpenAPI 3) |
 | Logging | Pino — pretty-printed in dev, JSON in production, secrets redacted |
-| Rate limiting | `@fastify/rate-limit` — global default + stricter limits on login/register |
+| Rate limiting | `@fastify/rate-limit` — global default + stricter limits on login/register/password-reset |
 
 ### Frontend
 | Concern | Technology |
@@ -275,7 +275,8 @@ These accounts give you a realistic multi-user feed with posts and replies sprea
 - **Registration** — Email must belong to a recognised German university domain. First and last name are required; study programme, semester, languages, and an initial Free/Premium plan choice (mock, no payment) are optional and can be filled in later via Settings if skipped. A verification email is sent before the account is active. (Requires SMTP setup; not available in local dev without it.)
 - **Login / Logout** — Sessions use short-lived JWTs (15 min) stored in httpOnly cookies, backed by a refresh token stored as a hash in the database.
 - **Session persistence** — On page load the app silently refreshes the session via the refresh token; users stay logged in across browser restarts.
-- **Rate limited** — Login and registration are limited to 5 requests per minute per client (separate from the general API-wide limit below) to slow down brute-force/signup-spam attempts. Exceeding it returns a `429` with a `Retry-After` header.
+- **Forgot / reset password** — A "Forgot password?" link on the login page leads to `/forgot-password`, where entering an email sends a reset link (valid 1 hour) if the account exists — the response is identical either way, so the endpoint can't be used to discover which emails are registered. The link opens `/reset-password?token=...`, which validates the token up front and shows an expired/invalid state (with a link to request a new one) or a new-password form. Completing the reset invalidates all existing sessions (same mechanism as logout) and sends a confirmation email. Reset tokens are single-use and stored only as a SHA-256 hash, never in plaintext. (Requires SMTP setup, like registration.)
+- **Rate limited** — Login, registration, and the forgot/reset-password endpoints are limited to 5 requests per minute per client (separate from the general API-wide limit below) to slow down brute-force/signup-spam/email-bombing attempts. Exceeding it returns a `429` with a `Retry-After` header.
 
 ### Feed
 - The main feed shows all posts, newest first.
@@ -362,6 +363,10 @@ Use the test accounts above to walk through each scenario. Log in via http://loc
 - [ ] Log out — should redirect to the login page.
 - [ ] Log in as `premium@tu-berlin.de` — confirm the feed loads without ads.
 - [ ] Refresh the page while logged in — session should persist without re-logging in.
+- [ ] From the login page, click "Forgot password?" and submit a registered email — should show the "check your email" confirmation with reset-specific copy, and a real reset email should arrive (requires SMTP setup).
+- [ ] Submit an email that isn't registered on `/forgot-password` — should show the exact same confirmation screen (no way to tell whether the email exists).
+- [ ] Click the link from the reset email, set a new password — should redirect to `/login`; the old password should no longer work and the new one should.
+- [ ] Visit `/reset-password` with no token, or with an expired/already-used one — should show an error state with a link back to `/forgot-password`.
 
 ### 2. Feed & Filtering
 - [ ] Open the feed — confirm posts appear from multiple categories.
@@ -470,7 +475,7 @@ The backend auto-generates interactive OpenAPI documentation using Fastify Swagg
 
 The Swagger UI lists every endpoint with its request schema, response schema, and lets you make test requests directly from the browser. This is the fastest way to explore or manually test backend behaviour without writing curl commands.
 
-**Rate limiting** — Every endpoint is limited to 100 requests/minute per client by default (`/auth/login` and `/auth/register` are stricter — see [Authentication](#authentication)); `/ai/*` routes are exempt since they have their own more precise per-user quota (see [AI Ask Bot](#ai-ask-bot)). Exceeding a limit returns `429` with `{ "code": "rate_limited", "message": "..." }` and a `Retry-After` header.
+**Rate limiting** — Every endpoint is limited to 100 requests/minute per client by default (`/auth/login`, `/auth/register`, `/auth/forgot-password`, and `/auth/reset-password` are stricter — see [Authentication](#authentication)); `/ai/*` routes are exempt since they have their own more precise per-user quota (see [AI Ask Bot](#ai-ask-bot)). Exceeding a limit returns `429` with `{ "code": "rate_limited", "message": "..." }` and a `Retry-After` header.
 
 ---
 
@@ -517,6 +522,7 @@ PeerConnect/
 │   │   │   │   ├── domain-validator.ts    # University email domain checks
 │   │   │   │   ├── email-verification-service.ts
 │   │   │   │   ├── feed-query.ts          # Composable Prisma filters for the post feed
+│   │   │   │   ├── mailer.ts              # Shared nodemailer transport — verification/reset/password-changed emails
 │   │   │   │   ├── post-search.ts         # Full-text search query builder
 │   │   │   │   ├── rate-limit-errors.ts   # Detects @fastify/rate-limit's thrown error shape for the 429 handler
 │   │   │   │   ├── reply-query.ts         # Reply sorting logic
@@ -535,8 +541,10 @@ PeerConnect/
 │           │   ├── UserProfilePage.tsx
 │           │   ├── LoginPage.tsx
 │           │   ├── RegisterPage.tsx
-│           │   ├── CheckEmailPage.tsx
-│           │   └── VerifyEmailPage.tsx
+│           │   ├── CheckEmailPage.tsx      # Shared "check your email" confirmation (register + reset variants)
+│           │   ├── VerifyEmailPage.tsx
+│           │   ├── ForgotPasswordPage.tsx
+│           │   └── ResetPasswordPage.tsx
 │           ├── components/          # Reusable UI components
 │           │   ├── ui/              # Base design-system primitives (buttons, inputs, etc.)
 │           │   ├── AdCard.tsx
