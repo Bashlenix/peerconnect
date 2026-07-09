@@ -347,6 +347,112 @@ describe("GET /auth/verify-email", () => {
   });
 });
 
+// ─── POST /auth/forgot-password ───────────────────────────────────────────────
+
+describe("POST /auth/forgot-password", () => {
+  async function registerUser(email: string) {
+    await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      payload: { email, password: "securePass1", firstName: "Test", lastName: "User" },
+    });
+    return prisma.user.findUnique({ where: { email } });
+  }
+
+  it("returns the generic message and issues a hashed reset token for a known email", async () => {
+    await registerUser("forgot-known@tu-berlin.de");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email: "forgot-known@tu-berlin.de" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      message: expect.stringContaining("If that email is registered"),
+    });
+
+    const user = await prisma.user.findUnique({ where: { email: "forgot-known@tu-berlin.de" } });
+    expect(user!.passwordResetTokenHash).not.toBeNull();
+    expect(user!.passwordResetTokenHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(user!.passwordResetExpiry!.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("returns the exact same generic message for an unknown email and creates no token", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email: "nobody@tu-berlin.de" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      message: expect.stringContaining("If that email is registered"),
+    });
+
+    const user = await prisma.user.findUnique({ where: { email: "nobody@tu-berlin.de" } });
+    expect(user).toBeNull();
+  });
+
+  it("does not overwrite the token when a second request arrives within the cooldown", async () => {
+    await registerUser("forgot-cooldown@tu-berlin.de");
+
+    await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email: "forgot-cooldown@tu-berlin.de" },
+    });
+    const firstHash = (await prisma.user.findUnique({ where: { email: "forgot-cooldown@tu-berlin.de" } }))!
+      .passwordResetTokenHash;
+
+    await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email: "forgot-cooldown@tu-berlin.de" },
+    });
+    const secondHash = (await prisma.user.findUnique({ where: { email: "forgot-cooldown@tu-berlin.de" } }))!
+      .passwordResetTokenHash;
+
+    expect(secondHash).toBe(firstHash);
+  });
+
+  it("invalidates the previous token once the cooldown has elapsed", async () => {
+    const user = await registerUser("forgot-refresh@tu-berlin.de");
+    // Simulate a request made more than the 60s cooldown ago by backdating
+    // passwordResetExpiry (expiry = requestedAt + 1h, so pushing it back by
+    // 61s puts requestedAt 61s in the past).
+    await prisma.user.update({
+      where: { id: user!.id },
+      data: {
+        passwordResetTokenHash: "stale-hash",
+        passwordResetExpiry: new Date(Date.now() + 60 * 60 * 1000 - 61 * 1000),
+      },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email: "forgot-refresh@tu-berlin.de" },
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const updated = await prisma.user.findUnique({ where: { email: "forgot-refresh@tu-berlin.de" } });
+    expect(updated!.passwordResetTokenHash).not.toBe("stale-hash");
+    expect(updated!.passwordResetExpiry!.getTime()).toBeGreaterThan(Date.now() + 59 * 60 * 1000);
+  });
+
+  it("returns 400 for a missing email", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 // ─── POST /auth/login ─────────────────────────────────────────────────────────
 
 describe("POST /auth/login", () => {

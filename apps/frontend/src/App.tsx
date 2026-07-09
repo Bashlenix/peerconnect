@@ -5,6 +5,7 @@ import RegisterPage from "./pages/RegisterPage";
 import CheckEmailPage from "./pages/CheckEmailPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import FeedPage from "./pages/FeedPage";
 import AskPage from "./pages/AskPage";
 import PostDetailPage from "./pages/PostDetailPage";
@@ -23,6 +24,7 @@ function AppRoutes() {
       <Route path="/check-email" element={<CheckEmailPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route
         path="/feed"
         element={

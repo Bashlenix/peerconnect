@@ -30,6 +30,10 @@ export interface VerifyEmailResponse {
   message: string;
 }
 
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
 export interface Subscription {
   status: "free" | "premium";
   startDate: string;
@@ -93,6 +97,26 @@ export async function verifyEmail(token: string): Promise<VerifyEmailResponse> {
 
   if (!res.ok) {
     throw new Error(data.message ?? "Verification failed");
+  }
+
+  return data;
+}
+
+export async function requestPasswordReset(email: string): Promise<ForgotPasswordResponse> {
+  const res = await fetch(`${BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email }),
+  });
+
+  const data = (await res.json()) as ForgotPasswordResponse & {
+    message?: string;
+    code?: ServiceErrorCode;
+  };
+
+  if (!res.ok) {
+    throw new AuthError(data.message ?? "Request failed", data.code);
   }
 
   return data;

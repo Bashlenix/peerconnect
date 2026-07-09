@@ -61,6 +61,8 @@ model User {
   emailVerificationExpiry DateTime?
   refreshTokenHash        String?   @unique
   refreshTokenExpiry      DateTime?
+  passwordResetTokenHash  String?   @unique
+  passwordResetExpiry     DateTime?
   universityId            String?
   topBadgeName            String?
   topBadgeAwardedAt       DateTime?

@@ -1,12 +1,18 @@
 import crypto from "crypto";
 import bcrypt from "bcrypt";
-import nodemailer from "nodemailer";
 import { prisma } from "../db.js";
 import { validateEmailDomain } from "./domain-validator.js";
+import { sendMail } from "./mailer.js";
 
 const BCRYPT_ROUNDS = 12;
 const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_EXPIRY_DAYS = 7;
+const PASSWORD_RESET_EXPIRY_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_COOLDOWN_MS = 60 * 1000;
+
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 export type RegisterResult =
   | { ok: true }
@@ -137,16 +143,44 @@ export async function logout(userId: string | undefined, refreshToken: string | 
 async function sendVerificationEmail(email: string, token: string): Promise<void> {
   const frontendUrl = process.env["FRONTEND_URL"] ?? "http://localhost:5173";
   const verifyUrl = `${frontendUrl}/verify-email?token=${token}`;
-  const transporter = nodemailer.createTransport({
-    host: process.env["SMTP_HOST"] ?? "smtp.resend.com",
-    port: parseInt(process.env["SMTP_PORT"] ?? "587"),
-    auth: { user: process.env["SMTP_USER"] ?? "resend", pass: process.env["SMTP_PASS"] ?? "" },
+  await sendMail(
+    email,
+    "Verify your PeerConnect account",
+    `Welcome to PeerConnect!\n\nVerify your email: ${verifyUrl}\n\nThis link expires in 24 hours.`,
+    `<p>Welcome to PeerConnect!</p><p><a href="${verifyUrl}">Click here to verify your email</a></p><p>This link expires in 24 hours.</p>`
+  );
+}
+
+async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
+  const frontendUrl = process.env["FRONTEND_URL"] ?? "http://localhost:5173";
+  const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+  await sendMail(
+    email,
+    "Reset your PeerConnect password",
+    `We received a request to reset your PeerConnect password.\n\nReset it here: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request this, you can safely ignore this email.`,
+    `<p>We received a request to reset your PeerConnect password.</p><p><a href="${resetUrl}">Click here to reset your password</a></p><p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>`
+  );
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const normalised = email.toLowerCase().trim();
+  const user = await prisma.user.findUnique({
+    where: { email: normalised },
+    select: { id: true, passwordResetExpiry: true },
   });
-  await transporter.sendMail({
-    from: process.env["EMAIL_FROM"] ?? "noreply@peerconnect.de",
-    to: email,
-    subject: "Verify your PeerConnect account",
-    text: `Welcome to PeerConnect!\n\nVerify your email: ${verifyUrl}\n\nThis link expires in 24 hours.`,
-    html: `<p>Welcome to PeerConnect!</p><p><a href="${verifyUrl}">Click here to verify your email</a></p><p>This link expires in 24 hours.</p>`,
+  if (!user) return;
+
+  if (user.passwordResetExpiry) {
+    const requestedAt = user.passwordResetExpiry.getTime() - PASSWORD_RESET_EXPIRY_MS;
+    if (Date.now() - requestedAt < PASSWORD_RESET_COOLDOWN_MS) return;
+  }
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiry = new Date(Date.now() + PASSWORD_RESET_EXPIRY_MS);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordResetTokenHash: hashToken(token), passwordResetExpiry: expiry },
   });
+
+  await sendPasswordResetEmail(normalised, token);
 }

@@ -1,6 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db.js";
-import { register, verifyEmail, login, verifyRefreshToken, logout } from "../modules/auth-service.js";
+import {
+  register,
+  verifyEmail,
+  login,
+  verifyRefreshToken,
+  logout,
+  requestPasswordReset,
+} from "../modules/auth-service.js";
 import { setAccessTokenCookie, setRefreshTokenCookie, clearAuthCookies } from "../modules/token-service.js";
 
 const ACCESS_TOKEN_TTL = "15m";
@@ -23,6 +30,10 @@ interface LoginBody {
 
 interface VerifyEmailQuery {
   token: string;
+}
+
+interface ForgotPasswordBody {
+  email: string;
 }
 
 export async function authRoute(app: FastifyInstance) {
@@ -123,6 +134,37 @@ export async function authRoute(app: FastifyInstance) {
       }
 
       return reply.status(200).send({ message: "Email verified successfully." });
+    }
+  );
+
+  // ─── POST /auth/forgot-password ───────────────────────────────────────────
+
+  app.post<{ Body: ForgotPasswordBody }>(
+    "/auth/forgot-password",
+    {
+      config: { rateLimit: { max: 5, timeWindow: "1 minute" } },
+      schema: {
+        tags: ["Auth"],
+        summary: "Request a password reset link",
+        body: {
+          type: "object",
+          required: ["email"],
+          properties: {
+            email: { type: "string", format: "email" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: { message: { type: "string" } },
+            required: ["message"],
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      await requestPasswordReset(request.body.email);
+      return reply.status(200).send({ message: "If that email is registered, we've sent a password reset link." });
     }
   );
 
