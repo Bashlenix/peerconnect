@@ -1,0 +1,40 @@
+name: Build DB image
+
+# Publishes the seeded PostgreSQL image (docker/db/Dockerfile) to GHCR so
+# Codespaces can `docker pull` a ready-to-run database instead of building it
+# from scratch on every fresh machine (the build runs npm ci + prisma + seeds
+# and is too slow/flaky to run inline under postStartCommand). db-up.sh pulls
+# ghcr.io/bashlenix/peerconnect-db:latest and only falls back to a local build
+# if the pull fails.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docker/db/**"
+      - "apps/backend/prisma/**"
+      - "packages/shared/**"
+  workflow_dispatch:
+
+jobs:
+  build-db:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/db/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/bashlenix/peerconnect-db:latest
+            ghcr.io/bashlenix/peerconnect-db:${{ github.sha }}

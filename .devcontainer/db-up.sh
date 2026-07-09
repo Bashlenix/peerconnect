@@ -14,15 +14,27 @@ cd "$(dirname "$0")/.."
 
 CONTAINER=peerconnect-db
 IMAGE=peerconnect-db
+REMOTE_IMAGE=ghcr.io/bashlenix/peerconnect-db:latest
 
 if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
   # Container exists (running or stopped) — start it. Errors are NOT suppressed
   # so a genuine failure is visible instead of silently triggering a rebuild.
   docker start "$CONTAINER"
 else
-  echo "Container '$CONTAINER' not found — building and starting a fresh one..."
-  docker build -f docker/db/Dockerfile -t "$IMAGE" .
-  docker run -d -p 5432:5432 --restart unless-stopped --name "$CONTAINER" "$IMAGE"
+  # No container yet (fresh Codespace, or it was removed). Prefer pulling the
+  # prebuilt seeded image published by .github/workflows/build-db-image.yml — a
+  # pull is far faster than building here (which runs npm ci + prisma + seeds)
+  # and won't time out under postStartCommand. Fall back to a local build when
+  # the pull fails (offline, or the image hasn't been published yet).
+  echo "Container '$CONTAINER' not found — pulling prebuilt image '$REMOTE_IMAGE'..."
+  if docker pull "$REMOTE_IMAGE"; then
+    RUN_IMAGE="$REMOTE_IMAGE"
+  else
+    echo "Pull failed — building the image locally as a fallback..."
+    docker build -f docker/db/Dockerfile -t "$IMAGE" .
+    RUN_IMAGE="$IMAGE"
+  fi
+  docker run -d -p 5432:5432 --restart unless-stopped --name "$CONTAINER" "$RUN_IMAGE"
 fi
 
 # Ensure the restart policy is set even on containers created before this change,
