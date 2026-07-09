@@ -41,8 +41,11 @@ fi
 # so the Docker daemon brings the DB back automatically on future resumes.
 docker update --restart unless-stopped "$CONTAINER" >/dev/null
 
+# 120s (not 60) so the one-time seed.sql restore on a container's very first
+# boot has room to finish before postStartCommand gives up — a too-short wait
+# surfaced as a spurious "✖ Running postStartCommand" on fresh Codespaces.
 echo "Waiting for Postgres to accept connections..."
-for _ in $(seq 1 60); do
+for _ in $(seq 1 120); do
   if docker exec "$CONTAINER" pg_isready -U postgres -d peerconnect >/dev/null 2>&1; then
     echo "Postgres is ready."
     exit 0
@@ -50,6 +53,6 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-echo "ERROR: Postgres did not become ready within 60s." >&2
+echo "ERROR: Postgres did not become ready within 120s." >&2
 docker logs --tail 30 "$CONTAINER" >&2 || true
 exit 1
